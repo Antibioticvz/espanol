@@ -1,0 +1,59 @@
+#TOPIC 3 | Покупки в магазине
+
+##BLOCK verb_group | Глаголы для похода по магазинам
+
+#WORD costar | стоить
+¿Cuánto cuesta esto? | Сколько это стоит?
+Esta camisa cuesta veinte dólares. | Эта рубашка стоит двадцать долларов.
+Los tomates cuestan más en invierno. | Помидоры стоят дороже зимой.
+No cuesta mucho, está bien de precio. | Это стоит немного, цена неплохая.
+
+#WORD pagar | платить
+¿Puedo pagar con tarjeta? | Могу я заплатить картой?
+Prefiero pagar en efectivo. | Я предпочитаю платить наличными.
+Voy a pagar en la caja. | Я собираюсь заплатить на кассе.
+
+#WORD buscar | искать
+Estoy buscando una camiseta de mi talla. | Я ищу футболку своего размера.
+¿Dónde puedo buscar ofertas? | Где я могу поискать скидки?
+Busco algo más barato. | Я ищу что-то подешевле.
+
+##BLOCK phrase_group | Ходовые фразы в магазине
+
+#CATEGORY В отделе одежды
+¿Tiene esto en talla mediana? | У вас есть это среднего размера?
+¿Puedo probarme esta chaqueta? | Могу я примерить эту куртку?
+Me queda un poco grande. | Мне немного великовато.
+¿Dónde están los probadores? | Где примерочные?
+
+#CATEGORY На кассе
+¿Me puede dar una bolsa, por favor? | Дайте мне, пожалуйста, пакет.
+¿Tiene cambio de un billete grande? | У вас есть сдача с крупной купюры?
+¿Aceptan tarjeta de crédito? | Вы принимаете кредитную карту?
+
+#CATEGORY Скидки и цены
+¿Hay algún descuento hoy? | Сегодня есть какая-нибудь скидка?
+Este producto está en oferta. | Этот товар со скидкой.
+¡Qué caro es esto! | Как это дорого!
+¿Cuál es el precio final? | Какая итоговая цена?
+
+##BLOCK vocabulary | Ключевая лексика
+la tienda | магазин
+el supermercado | супермаркет
+el precio | цена
+la oferta | акция
+el descuento | скидка
+la caja | касса
+el recibo | чек
+la talla | размер
+el probador | примерочная
+la bolsa | пакет
+el efectivo | наличные
+la tarjeta | карта
+el dependiente | продавец
+el carrito | тележка
+el diseño | дизайн
+
+##BLOCK story | Короткий рассказ
+ES: Hoy fui de compras al centro comercial porque necesitaba una chaqueta nueva. Busqué mi talla durante un rato y encontré una en oferta. Pregunté cuánto costaba y era más barata de lo que esperaba. Me la probé, me quedó perfecta y decidí comprarla. En la caja pagué con tarjeta y salí muy contento.
+RU: Сегодня я пошёл за покупками в торговый центр, потому что мне нужна была новая куртка. Я немного поискал свой размер и нашёл куртку со скидкой. Я спросил, сколько она стоит, и она оказалась дешевле, чем я ожидал. Я примерил её, она села идеально, и я решил её купить. На кассе я заплатил картой и ушёл очень довольным.
