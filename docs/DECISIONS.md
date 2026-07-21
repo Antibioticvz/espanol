@@ -100,3 +100,28 @@ espanol/
 ```
 
 Ветки: `main` — стабильная; фичи агентов — в worktree-ветках, merge после прохождения тестов.
+
+## D-16. iOS CoreData-модель — программная (NSManagedObjectModel в коде), не .xcdatamodeld
+
+Модель CoreData на iOS строится программно в `CoreDataStack.makeModel()` (единый кэшированный
+`NSManagedObjectModel` на процесс), а не в `.xcdatamodeld`. Причина: проект генерируется XcodeGen и
+собирается headless через `xcodebuild` без Xcode-GUI (D-08); программная модель полностью
+контролируема из кода, тривиально тестируется на in-memory сторе и не зависит от компиляции
+`.xcdatamodeld`. Сущности, атрибуты и связи (с инверсиями и delete rules) описаны в коде.
+
+## D-17. LearningSession переживает удаление урока (nullify)
+
+Связь `Lesson → sessions` имеет delete rule **nullify** (а не cascade): при удалении урока его
+`LearningSession` не стираются, а лишь отвязываются (`session.lesson = nil`). Иначе общая история
+активности, streak и heatmap «худели» бы задним числом при удалении урока. Поэтому
+`LearningSession.lesson` объявлен опциональным, а `StatisticsService` не обращается к `session.lesson`
+(считает по `completedAt`/`actualDurationSeconds`), корректно работая с «осиротевшими» сессиями.
+Миграция не нужна — продовых данных ещё нет.
+
+## D-18. Lock-screen widget: только статистика (accessory), текущую фразу показывает Now Playing
+
+Полноценный lock-screen виджет с текущей фразой (SPEC §7.1) не делаем: фразу на экране блокировки
+уже показывает Now Playing (MPNowPlayingInfoCenter, D-… lock screen). Виджет реализован как единый
+`StatisticsWidget` со статистикой дня и семействами Home Screen (`systemSmall`/`systemMedium`) и
+lock-screen accessory (`accessoryCircular`/`accessoryRectangular`/`accessoryInline`). Так избегаем
+дублирования и сложной синхронизации live-состояния сессии в виджет.

@@ -1,0 +1,93 @@
+name: AudioLearner
+options:
+  bundleIdPrefix: com.victor
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    from: "0.9.0"
+
+targets:
+  AudioLearner:
+    type: application
+    platform: iOS
+    sources:
+      - path: AudioLearner
+      - path: Shared
+    dependencies:
+      - package: ZIPFoundation
+      - target: AudioLearnerWidgetExtension
+        embed: true
+    settings:
+      base:
+        INFOPLIST_FILE: AudioLearner/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.victor.audiolearner
+        CODE_SIGN_ENTITLEMENTS: AudioLearner/AudioLearner.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_PREVIEWS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_EMIT_LOC_STRINGS: YES
+
+  AudioLearnerWidgetExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: AudioLearnerWidget
+      - path: Shared
+    settings:
+      base:
+        INFOPLIST_FILE: AudioLearnerWidget/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.victor.audiolearner.widget
+        CODE_SIGN_ENTITLEMENTS: AudioLearnerWidget/AudioLearnerWidget.entitlements
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+
+  AudioLearnerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: AudioLearnerTests
+    dependencies:
+      - target: AudioLearner
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.victor.audiolearner.tests
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/AudioLearner.app/AudioLearner"
+
+schemes:
+  AudioLearner:
+    build:
+      targets:
+        AudioLearner: all
+        AudioLearnerWidgetExtension: all
+        AudioLearnerTests: [test]
+    test:
+      targets:
+        - AudioLearnerTests
+      gatherCoverageData: false
+    run:
+      config: Debug
+    profile:
+      config: Release
+    archive:
+      config: Release
