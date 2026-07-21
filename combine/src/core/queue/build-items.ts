@@ -1,10 +1,10 @@
-import { join } from 'node:path'
 import type { ParsedLesson, ParsedPhrase } from '../types/parsed-lesson'
 import { isGroupsBlock } from '../types/parsed-lesson'
 import type { BlockJson, GroupJson, LessonJson, PhraseJson, Provider, VoiceRef } from '../types/lesson-json'
 import { GENERATOR_VERSION, SCHEMA_VERSION, isGroupsBlockJson } from '../types/lesson-json'
 import type { GenerationTask } from '../types/generation'
 import { pad2 } from '../util/slug'
+import { resolveWithinDir } from '../util/paths'
 
 export interface SessionVoices {
   es: VoiceRef
@@ -142,6 +142,17 @@ export function buildLessonSkeleton(
  * Строит плоский список задач очереди из LessonJson (после buildLessonSkeleton или загруженного
  * с диска для resume). Задачи для фраз/слов со status='done' не включаются (идемпотентность —
  * см. docs/SPEC_COMBINE.md §4.3, "resume берёт только pending+failed").
+ *
+ * Мульти-верификаторное ревью (та же категория, что combine-api-support.ts:108 и
+ * anki-export.service.ts:293 — path traversal через audio.es/audio.ru из lesson.json): для
+ * ФРЕШ-генерации (buildLessonSkeleton) audio.es/audio.ru строятся нашим же кодом и всегда честны,
+ * но для RESUME lessonJson читается с диска — тот же файл, который в принципе мог быть
+ * отредактирован вручную (или получен из недоверенного источника) со значением вида
+ * "../../../../etc/cron.d/evil". Здесь риск СЕРЬЁЗНЕЕ, чем в найденных ревью местах: esOutPath/
+ * ruOutPath ниже — это не чтение, а КУДА generation-queue.ts запишет mkdir(recursive)+writeFile()
+ * синтезированные байты — т.е. без проверки это была бы запись ПРОИЗВОЛЬНОГО файла на диск, а не
+ * только чтение. resolveWithinDir() (core/util/paths.ts) — та же защита, что и в двух местах,
+ * явно указанных ревью; для фреш-генерации она безвредна (пути и так внутри audioRoot).
  */
 export function flattenToTasks(lessonJson: LessonJson, audioRoot: string, voices: SessionVoices): GenerationTask[] {
   const tasks: GenerationTask[] = []
@@ -165,8 +176,8 @@ export function flattenToTasks(lessonJson: LessonJson, audioRoot: string, voices
       groupKey,
       esText,
       ruText,
-      esOutPath: join(audioRoot, ...audioEs.split('/')),
-      ruOutPath: join(audioRoot, ...audioRu.split('/')),
+      esOutPath: resolveWithinDir(audioRoot, audioEs),
+      ruOutPath: resolveWithinDir(audioRoot, audioRu),
       esVoiceId: voices.es.id,
       esVoiceName: voices.es.name,
       ruVoiceId: voices.ru.id,

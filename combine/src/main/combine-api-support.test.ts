@@ -237,4 +237,20 @@ describe('buildLibraryEntries / readPhraseAudioDataUrl — интеграция 
     await writeRawLesson('05-missing', lesson)
     await expect(readPhraseAudioDataUrl(fileService, outputRoot, '05-missing', 'nope', 'es')).rejects.toThrow(/не найдена/)
   })
+
+  /**
+   * Мульти-верификаторное ревью (minor, combine-api-support.ts:108): audio.es/audio.ru приходят
+   * из lesson.json — файла, который теоретически мог быть отредактирован вручную/получен из
+   * недоверенного источника. Без resolveWithinDir() эта функция честно прочитала бы и вернула
+   * renderer'у как data: URL байты ЛЮБОГО файла на диске, доступного текущему пользователю ОС.
+   */
+  it('readPhraseAudioDataUrl отклоняет audio.es с directory traversal вне папки урока', async () => {
+    const lesson = phraseLesson({ topic_id: '06-traversal' })
+    if (lesson.blocks[1].type === 'vocabulary') {
+      lesson.blocks[1].words[0].audio = { es: '../../../../../../../../etc/hosts', ru: 'audio/ru/w1.mp3' }
+    }
+    await writeRawLesson('06-traversal', lesson)
+
+    await expect(readPhraseAudioDataUrl(fileService, outputRoot, '06-traversal', 'w1', 'es')).rejects.toThrow(/выходит за пределы/)
+  })
 })
