@@ -27,8 +27,8 @@ final class PlayerViewModel {
     // MARK: - Start
 
     func startSession() {
-        guard let lesson = flow.lesson else { return }
         let phrases = flow.orderedSelectedPhrases()
+        guard !phrases.isEmpty else { return }
         let playables = phrases.compactMap {
             PlayablePhrase(phrase: $0, autoSpeedByStatus: flow.config.autoSpeedByStatus)
         }
@@ -37,11 +37,11 @@ final class PlayerViewModel {
         transitions = []
         didFinish = false
 
-        // Создаём запись сессии.
+        // Создаём запись сессии (lesson == nil для «Сессии дня», D-17 это позволяет).
         let session = LearningSession(context: env.viewContext)
         session.sessionId = UUID()
         session.startedAt = startedAt
-        session.lesson = lesson
+        session.lesson = flow.lesson
         session.speed = flow.config.speed
         session.phrasesCount = Int64(playables.count)
         session.phrasesRepeats = Int64(playables.count * flow.config.repetitions)
@@ -76,6 +76,10 @@ final class PlayerViewModel {
         player.onPhraseCompleted = { [weak self] phraseId in self?.handlePhraseCompleted(phraseId) }
         player.onSessionFinished = { [weak self] in self?.finish() }
         player.onItemChanged = { [weak self] in self?.updateNowPlaying() }
+        player.onSleepTimerFired = { [weak self] in
+            Haptics.success(enabled: self?.env.settings.vibrationEnabled ?? true)
+            self?.updateNowPlaying()
+        }
 
         player.configure(phrases: playables, config: flow.config)
         player.volume = env.settings.defaultVolume
@@ -109,6 +113,10 @@ final class PlayerViewModel {
     func setSpeed(_ speed: Double) {
         player.speed = speed
         updateNowPlaying()
+    }
+
+    func setSleepTimer(minutes: Int) {
+        player.setSleepTimer(minutes: minutes)
     }
 
     func toggleFavorite() {
@@ -148,7 +156,7 @@ final class PlayerViewModel {
         let completedAt = Date()
         let duration = Int(completedAt.timeIntervalSince(startedAt))
 
-        if let session = learningSession, let lesson = flow.lesson {
+        if let session = learningSession {
             session.completedAt = completedAt
             session.actualDurationSeconds = Int64(duration)
             session.phrasesCompletedCount = Int64(player.completedPhraseIds.count)
@@ -162,13 +170,18 @@ final class PlayerViewModel {
                 update.updatedAt = completedAt
                 update.session = session
             }
+            try? env.viewContext.save()
 
-            SessionCompletion.applyLessonProgress(
-                env: env, lesson: lesson,
-                durationSeconds: duration,
-                phrasesReviewed: player.completedPhraseIds.count,
-                completedAt: completedAt
-            )
+            // Прогресс урока — только для сессии одного урока (для «Сессии дня» lesson == nil,
+            // статусы фраз уже обновлены SRS в их родных уроках).
+            if let lesson = flow.lesson {
+                SessionCompletion.applyLessonProgress(
+                    env: env, lesson: lesson,
+                    durationSeconds: duration,
+                    phrasesReviewed: player.completedPhraseIds.count,
+                    completedAt: completedAt
+                )
+            }
         }
 
         let newAchievements = SessionCompletion.evaluateAchievements(env: env, now: completedAt)
@@ -180,7 +193,7 @@ final class PlayerViewModel {
         Haptics.success(enabled: env.settings.sessionCompleteVibration)
 
         flow.result = SessionResult(
-            lessonTitle: flow.lesson?.titleRu ?? "",
+            lessonTitle: flow.sessionTitle,
             completedAt: completedAt,
             durationSeconds: duration,
             phrasesCompleted: player.completedPhraseIds.count,

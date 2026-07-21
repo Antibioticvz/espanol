@@ -19,6 +19,7 @@ struct SettingsView: View {
                 audioSection(settings)
                 learningSection(settings)
                 sessionDefaultsSection(settings)
+                dailySessionSection(settings)
                 dataSection
                 Section {
                     NavigationLink { AboutView() } label: {
@@ -88,6 +89,17 @@ struct SettingsView: View {
                 }
             }
             Stepper("Пауза: \(Int(settings.defaultPauseSeconds)) сек", value: $settings.defaultPauseSeconds, in: 0...15, step: 1)
+        }
+    }
+
+    private func dailySessionSection(_ settings: AppSettings) -> some View {
+        @Bindable var settings = settings
+        return Section("Сессия дня") {
+            Stepper("Лимит фраз: \(settings.dailySessionLimit)",
+                    value: $settings.dailySessionLimit, in: 5...100, step: 5)
+            Picker("Порядок подбора", selection: $settings.dailySessionOrder) {
+                ForEach(DailySessionOrder.allCases) { Text($0.titleRu).tag($0) }
+            }
         }
     }
 

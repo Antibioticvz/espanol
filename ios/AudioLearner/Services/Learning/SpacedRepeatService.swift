@@ -16,6 +16,16 @@ enum ReviewUrgency: String {
         case .notDue: return "Не требует повтора"
         }
     }
+
+    /// Ранг для сортировки «сначала слабые» (меньше = приоритетнее).
+    var rank: Int {
+        switch self {
+        case .urgent: return 0
+        case .soon: return 1
+        case .normal: return 2
+        case .notDue: return 3
+        }
+    }
 }
 
 /// Простая модель интервального повторения без SM-2 (спека §9).

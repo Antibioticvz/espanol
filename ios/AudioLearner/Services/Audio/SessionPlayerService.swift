@@ -38,6 +38,18 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
     private(set) var currentDuration: TimeInterval = 0
     private(set) var completedPhraseIds: Set<String> = []
 
+    // Sleep-таймер (v1.2): 0 = выкл. Остаток тикает каждую секунду для отображения.
+    private(set) var sleepTotalSeconds: Int = 0
+    private(set) var sleepRemainingSeconds: Int = 0
+    var sleepMinutes: Int { sleepTotalSeconds / 60 }
+    var isSleepActive: Bool { sleepTotalSeconds > 0 }
+
+    @ObservationIgnored var onSleepTimerFired: (@MainActor () -> Void)?
+    @ObservationIgnored private var sleepTimer: Timer?
+    @ObservationIgnored private var sleepDeadline: Date?
+    @ObservationIgnored private var sleepPending = false
+    var isStopPending: Bool { sleepPending }
+
     /// Автоскорость текущей фразы (множитель по статусу); применяется поверх speed.
     @ObservationIgnored private var currentSpeedMultiplier: Double = 1.0
 
@@ -116,6 +128,12 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
     func reset() {
         stopTimers()
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        sleepDeadline = nil
+        sleepPending = false
+        sleepTotalSeconds = 0
+        sleepRemainingSeconds = 0
         player?.stop()
         player = nil
         stopSilence()
@@ -170,6 +188,53 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
     func stop() {
         reset()
+    }
+
+    // MARK: - Sleep timer (v1.2)
+
+    /// Устанавливает sleep-таймер (0 = выкл). По истечении доигрывает текущий повтор
+    /// и мягко ставит на паузу (не завершает сессию).
+    func setSleepTimer(minutes: Int) {
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        sleepPending = false
+        sleepTotalSeconds = max(0, minutes) * 60
+        sleepRemainingSeconds = sleepTotalSeconds
+        guard sleepTotalSeconds > 0 else { sleepDeadline = nil; return }
+        sleepDeadline = Date().addingTimeInterval(Double(sleepTotalSeconds))
+        sleepTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tickSleep() }
+        }
+    }
+
+    private func tickSleep() {
+        guard let deadline = sleepDeadline else { return }
+        let remaining = Int(ceil(deadline.timeIntervalSinceNow))
+        sleepRemainingSeconds = max(0, remaining)
+        if remaining <= 0 {
+            sleepTimer?.invalidate()
+            sleepTimer = nil
+            sleepDeadline = nil
+            sleepPending = true // остановимся по завершении текущего повтора
+        }
+    }
+
+    /// Помечает остановку по завершении текущего повтора (для тестов/внутреннего использования).
+    func requestStopAtRepetitionEnd() { sleepPending = true }
+
+    /// Если запрошена остановка по sleep-таймеру — мягко ставим на паузу (не finish).
+    @discardableResult
+    func consumeSleepStopIfNeeded() -> Bool {
+        guard sleepPending else { return false }
+        sleepPending = false
+        sleepTotalSeconds = 0
+        sleepRemainingSeconds = 0
+        sleepDeadline = nil
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        pause()
+        onSleepTimerFired?()
+        return true
     }
 
     // MARK: - Single clip (флеш-карты)
@@ -347,6 +412,8 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
     }
 
     private func finishRepetition() {
+        // Sleep-таймер: доиграли повтор — мягко останавливаемся.
+        if consumeSleepStopIfNeeded() { return }
         if currentRepetition < repetitions {
             currentRepetition += 1
             currentLeg = .firstAudio

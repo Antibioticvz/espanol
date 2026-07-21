@@ -77,6 +77,53 @@ final class SessionLifecycleTests: AudioLearnerTestCase {
         player.reset()
     }
 
+    // v1.2 B: sleep-таймер устанавливается и выключается.
+    func testSleepTimerSetAndOff() {
+        let player = SessionPlayerService()
+        player.setSleepTimer(minutes: 5)
+        XCTAssertEqual(player.sleepTotalSeconds, 300)
+        XCTAssertEqual(player.sleepMinutes, 5)
+        XCTAssertTrue(player.isSleepActive)
+        XCTAssertEqual(player.sleepRemainingSeconds, 300)
+
+        player.setSleepTimer(minutes: 0)
+        XCTAssertFalse(player.isSleepActive)
+        XCTAssertEqual(player.sleepRemainingSeconds, 0)
+    }
+
+    // v1.2 B: по sleep-таймеру — мягкая пауза на конце повтора (не завершение сессии).
+    func testSleepStopPausesNotFinishes() {
+        let player = SessionPlayerService()
+        var sleepFired = false
+        var finished = false
+        player.onSleepTimerFired = { sleepFired = true }
+        player.onSessionFinished = { finished = true }
+
+        player.requestStopAtRepetitionEnd()
+        XCTAssertTrue(player.isStopPending)
+
+        let stopped = player.consumeSleepStopIfNeeded()
+        XCTAssertTrue(stopped)
+        XCTAssertFalse(player.isPlaying, "мягкая пауза")
+        XCTAssertFalse(player.isFinished, "sleep не завершает сессию")
+        XCTAssertTrue(sleepFired)
+        XCTAssertFalse(finished)
+        XCTAssertFalse(player.isSleepActive, "таймер сброшен после срабатывания")
+    }
+
+    // v1.2 B: старт «Сессии дня» кросс-урочно (lesson == nil).
+    func testStartDailySessionCrossLesson() throws {
+        let env = AppEnvironment(inMemory: true)
+        _ = try importFixture(into: env)
+        let started = env.startDailySession()
+        XCTAssertTrue(started)
+        XCTAssertTrue(env.sessionFlow.isDailySession)
+        XCTAssertNil(env.sessionFlow.lesson)
+        XCTAssertEqual(env.sessionFlow.step, .config)
+        XCTAssertFalse(env.sessionFlow.orderedSelectedPhrases().isEmpty)
+        XCTAssertEqual(env.sessionFlow.sessionTitle, "Сессия дня")
+    }
+
     // MINOR 11: завершение без единой фразы — отмена (сессия не засчитывается).
     func testCleanupOrphanSessionsRemovesUnfinished() throws {
         let env = AppEnvironment(inMemory: true)

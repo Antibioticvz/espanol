@@ -120,7 +120,13 @@ struct SessionConfigView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Назад") { env.sessionFlow.step = .selectPhrases }
+                Button("Назад") {
+                    if env.sessionFlow.isDailySession {
+                        env.sessionFlow.reset()
+                    } else {
+                        env.sessionFlow.step = .selectPhrases
+                    }
+                }
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button {

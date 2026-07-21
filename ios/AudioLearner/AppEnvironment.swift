@@ -61,6 +61,24 @@ final class AppEnvironment {
         selectedTab = .session
     }
 
+    /// Собирает и запускает «Сессию дня» из SRS-рекомендаций по всем урокам (D-23).
+    /// - Returns: false, если повторять нечего (всё повторено).
+    @discardableResult
+    func startDailySession(now: Date = Date()) -> Bool {
+        endActiveSession(abandoned: true)
+        let lessons = (try? repository.allLessons()) ?? []
+        let phrases = DailySession.build(
+            lessons: lessons, srs: srs,
+            limit: settings.dailySessionLimit,
+            order: settings.dailySessionOrder,
+            now: now
+        )
+        guard !phrases.isEmpty else { return false }
+        sessionFlow.beginDaily(phrases: phrases, settings: settings)
+        selectedTab = .session
+        return true
+    }
+
     /// Останавливает активное воспроизведение, очищает lock screen и, если незавершённая
     /// сессия брошена, удаляет её запись (не засчитывается в историю).
     func endActiveSession(abandoned: Bool) {

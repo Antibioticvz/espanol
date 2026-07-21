@@ -43,6 +43,7 @@ struct SessionPlayerView: View {
                 Divider()
                 controls(vm, player)
                 extraControls(vm)
+                sleepControl(vm, player)
                 parametersSection(vm, player)
                 Button(role: .destructive) {
                     showEndConfirm = true
@@ -62,12 +63,50 @@ struct SessionPlayerView: View {
 
     private func sessionProgress(_ player: SessionPlayerService) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Прогресс сессии")
-                .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Text("Прогресс сессии")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if player.isSleepActive {
+                    Label(sleepRemainingText(player), systemImage: "moon.zzz.fill")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
             ProgressBarView(value: player.sessionProgress)
             Text("\(player.completedPhraseIds.count) / \(player.totalPhrases) фраз завершено")
                 .font(.caption2).foregroundStyle(.secondary)
         }
+    }
+
+    private func sleepControl(_ vm: PlayerViewModel, _ player: SessionPlayerService) -> some View {
+        let options = [0, 5, 10, 15, 30, 45]
+        return HStack {
+            Label("Таймер сна", systemImage: "moon.zzz")
+                .font(.caption)
+            Spacer()
+            Menu {
+                ForEach(options, id: \.self) { m in
+                    Button {
+                        vm.setSleepTimer(minutes: m)
+                    } label: {
+                        if m == player.sleepMinutes {
+                            Label(m == 0 ? "Выкл" : "\(m) мин", systemImage: "checkmark")
+                        } else {
+                            Text(m == 0 ? "Выкл" : "\(m) мин")
+                        }
+                    }
+                }
+            } label: {
+                Text(player.isSleepActive ? sleepRemainingText(player) : "Выкл")
+                    .font(.caption)
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private func sleepRemainingText(_ player: SessionPlayerService) -> String {
+        let s = player.sleepRemainingSeconds
+        return String(format: "%d:%02d", s / 60, s % 60)
     }
 
     private func currentPhraseCard(_ vm: PlayerViewModel, _ player: SessionPlayerService) -> some View {

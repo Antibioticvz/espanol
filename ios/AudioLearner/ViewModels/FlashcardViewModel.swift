@@ -157,7 +157,7 @@ final class FlashcardViewModel {
         let duration = Int(completedAt.timeIntervalSince(startedAt))
         flow.player.stopClip()
 
-        if let ls = learningSession, let lesson = flow.lesson {
+        if let ls = learningSession {
             ls.completedAt = completedAt
             ls.actualDurationSeconds = Int64(duration)
             ls.phrasesCompletedCount = Int64(session.completedCount)
@@ -169,12 +169,15 @@ final class FlashcardViewModel {
                 update.updatedAt = completedAt
                 update.session = ls
             }
-            SessionCompletion.applyLessonProgress(
-                env: env, lesson: lesson,
-                durationSeconds: duration,
-                phrasesReviewed: session.completedCount,
-                completedAt: completedAt
-            )
+            try? env.viewContext.save()
+            if let lesson = flow.lesson {
+                SessionCompletion.applyLessonProgress(
+                    env: env, lesson: lesson,
+                    durationSeconds: duration,
+                    phrasesReviewed: session.completedCount,
+                    completedAt: completedAt
+                )
+            }
         }
 
         let newAchievements = SessionCompletion.evaluateAchievements(env: env, now: completedAt)
@@ -184,7 +187,7 @@ final class FlashcardViewModel {
         Haptics.success(enabled: env.settings.sessionCompleteVibration)
 
         flow.result = SessionResult(
-            lessonTitle: flow.lesson?.titleRu ?? "",
+            lessonTitle: flow.sessionTitle,
             completedAt: completedAt,
             durationSeconds: duration,
             phrasesCompleted: session.completedCount,
