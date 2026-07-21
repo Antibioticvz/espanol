@@ -16,3 +16,9 @@ mac:
   # Личное использование — без Apple Developer ID; unsigned build (identity: null отключает
   # попытку найти сертификат для codesign, иначе electron-builder падает на машине без Keychain-сертификата).
   identity: null
+# Публикации/auto-update нет (личное использование, --publish never в скрипте dist:mac) —
+# publish: null ЯВНО отключает и генерацию update-метаданных (latest-mac.yml), а не только загрузку.
+# Без этого electron-builder падает в конце сборки на createUpdateInfoTasks() ("Cannot read
+# properties of null (reading 'channel')") — сам .dmg к этому моменту уже собран и валиден, но
+# команда возвращает ненулевой код, что ломает `npm run dist:mac` как критерий готовности.
+publish: null
