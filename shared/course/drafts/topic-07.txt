@@ -1,0 +1,154 @@
+#TOPIC 7 | Переписка после свидания
+
+##BLOCK verb_group | Переписываемся каждый день
+
+#WORD escribir | писать
+Le escribo todas las mañanas, aunque sea poco. | Я пишу ей каждое утро, пусть даже немного.
+¿Le escribiste ya, o le escribo yo? | Ты ей уже написал, или мне написать?
+Nos escribimos durante todo el día. | Мы переписываемся весь день.
+
+#WORD responder | отвечать
+Siempre responde rápido, me gusta eso de ella. | Она всегда быстро отвечает, мне это в ней нравится.
+¿Por qué no me respondes? ¿Estás ocupada? | Почему ты мне не отвечаешь? Занята?
+Le respondí enseguida, no quería hacerla esperar. | Я ответил сразу, не хотел заставлять её ждать.
+
+#WORD mandar | отправлять
+Le mando un mensaje antes de dormir. | Я отправляю ей сообщение перед сном.
+¿Me mandas una foto tuya de hoy? | Пришлёшь мне своё сегодняшнее фото?
+Nos mandamos memes graciosos todo el tiempo. | Мы постоянно отправляем друг другу смешные мемы.
+
+#WORD leer | читать
+Leí tu mensaje, pero no supe qué responder. | Я прочитал твоё сообщение, но не знал, что ответить.
+¿Ya leíste lo que te mandé? | Ты уже прочитала, что я тебе отправил?
+Leo sus mensajes varias veces antes de contestar. | Я перечитываю её сообщения несколько раз, прежде чем ответить.
+
+#WORD esperar | ждать
+Odio esperar tanto tu respuesta. | Терпеть не могу так долго ждать твоего ответа.
+Espero que me escribas pronto. | Жду, что ты скоро мне напишешь.
+No me gusta hacerte esperar. | Мне не нравится заставлять тебя ждать.
+
+#WORD tardar | долго не отвечать
+Perdón por tardar tanto en responder. | Извини, что так долго не отвечал.
+¿Por qué tardaste tanto hoy? | Почему ты сегодня так долго не отвечала?
+Nunca tarda más de una hora en escribirme. | Она никогда не отвечает мне дольше часа.
+
+##BLOCK verb_group | Планируем снова встретиться
+
+#WORD planear | планировать
+Estoy planeando algo especial para el sábado. | Я планирую кое-что особенное на субботу.
+¿Qué planeamos para la próxima cita? | Что запланируем на следующее свидание?
+Me gusta planear todo con tiempo. | Мне нравится всё планировать заранее.
+
+#WORD quedar | договориться встретиться
+¿Quedamos el viernes por la noche? | Договоримся встретиться в пятницу вечером?
+Quedamos en el mismo café de la primera cita. | Мы договорились встретиться в том же кафе, где было первое свидание.
+¿A qué hora quedamos exactamente? | Во сколько именно мы встречаемся?
+
+#WORD confirmar | подтверждать
+Te confirmo la hora esta noche. | Подтвержу тебе время сегодня вечером.
+¿Me confirmas si vienes al final? | Подтвердишь мне, придёшь ли ты в итоге?
+Ya confirmé la mesa para los dos. | Я уже подтвердил столик на двоих.
+
+#WORD proponer | предлагать
+Te propongo algo diferente esta vez. | Предлагаю тебе на этот раз кое-что другое.
+Me propuso un plan que me encantó. | Она предложила план, который мне очень понравился.
+¿Puedo proponerte ver una película en mi casa? | Могу предложить тебе посмотреть фильм у меня дома?
+
+#WORD avisar | предупреждать / давать знать
+Avísame si algo cambia, por favor. | Дай мне знать, если что-то изменится, пожалуйста.
+Te aviso apenas salga del trabajo. | Дам тебе знать, как только закончу работу.
+Me avisó que iba a llegar tarde. | Она предупредила меня, что придёт поздно.
+
+#WORD decidir | решать
+Todavía no decidimos a qué hora quedamos. | Мы ещё не решили, во сколько встретимся.
+Decide tú esta vez, yo decidí la vez pasada. | Реши в этот раз ты, я решал в прошлый раз.
+Decidimos vernos el próximo fin de semana. | Мы решили встретиться в следующие выходные.
+
+#WORD ver | увидеться
+Quiero verte otra vez pronto. | Хочу снова скоро тебя увидеть.
+¿Nos vemos esta semana o la próxima? | Увидимся на этой неделе или на следующей?
+Nos vimos hace poco, pero ya te extraño. | Мы недавно виделись, но я уже скучаю по тебе.
+
+##BLOCK verb_group | Нежность, шутки и голос
+
+#WORD llamar | звонить
+¿Te llamo esta noche por videollamada? | Позвонить тебе сегодня вечером по видеосвязи?
+Me encanta cuando me llamas de sorpresa. | Мне очень нравится, когда ты звонишь мне неожиданно.
+Te llamé, pero no contestaste. | Я тебе позвонил, но ты не ответила.
+
+#WORD extrañar | скучать
+Te extraño más de lo que pensaba. | Я скучаю по тебе больше, чем думал.
+¿Me extrañas tú también? | Ты тоже по мне скучаешь?
+La extraño desde que se fue de viaje. | Я скучаю по ней с тех пор, как она уехала в поездку.
+
+#WORD bromear | шутить
+Solo estaba bromeando, no te enojes. | Я просто шутил, не злись.
+Me gusta cómo bromeas por mensaje. | Мне нравится, как ты шутишь в переписке.
+Bromeamos tanto que se nos fue la hora. | Мы так шутили, что не заметили, как пролетело время.
+
+#WORD coquetear | флиртовать
+Me gusta coquetear contigo por mensaje. | Мне нравится флиртовать с тобой в переписке.
+¿Estás coqueteando conmigo otra vez? | Ты снова со мной флиртуешь?
+Coqueteamos un poco antes de hablar en serio. | Мы немного пофлиртовали, прежде чем поговорить серьёзно.
+
+#WORD grabar | записывать
+Te grabé un audio contándote mi día. | Я записал тебе голосовое о том, как прошёл мой день.
+¿Me grabas un audio en vez de escribir? | Запишешь мне голосовое вместо того, чтобы писать?
+Grabo audios largos cuando no tengo tiempo de escribir. | Я записываю длинные голосовые, когда нет времени писать.
+
+#WORD sonreír | улыбаться
+Sonrío solo con leer tus mensajes. | Я улыбаюсь, просто читая твои сообщения.
+Me hiciste sonreír todo el día con eso. | Ты заставила меня улыбаться весь день из-за этого.
+Sonríe cada vez que le mando un audio gracioso. | Она улыбается каждый раз, когда я отправляю ей смешное голосовое.
+
+##BLOCK phrase_group | Ходовые фразы — переписка с Камилой
+
+#CATEGORY Начать переписку
+Hola, ¿cómo va tu día? | Привет, как проходит твой день?
+¿Qué haces? Hace rato no sé de ti. | Что делаешь? Давно о тебе не слышал.
+Perdón la hora, ¿estás despierta? | Извини за поздний час, ты не спишь?
+
+#CATEGORY Договориться о встрече
+¿Nos vemos este fin de semana? | Увидимся в эти выходные?
+¿Qué día te queda mejor a ti? | Какой день тебе больше подходит?
+Avísame la hora y ahí estaré. | Скажи время, и я буду там.
+
+#CATEGORY Флирт и комплименты
+Se te ve muy linda en esa foto. | Ты очень красивая на этом фото.
+No dejo de pensar en ti. | Не перестаю думать о тебе.
+Me encanta cómo escribes, tan tú. | Мне очень нравится, как ты пишешь, это так похоже на тебя.
+
+#CATEGORY Голосовые и созвоны
+¿Prefieres que te escriba o te llame? | Ты предпочитаешь, чтобы я написал или позвонил?
+Te mandé un audio, escúchalo cuando puedas. | Я отправил тебе голосовое, послушай, когда сможешь.
+Hagamos una videollamada esta noche. | Давай сегодня вечером созвонимся по видео.
+
+#CATEGORY Эмодзи и фото
+Mándame una foto de lo que estás comiendo. | Пришли мне фото того, что ты ешь.
+Usas muchos emojis, se te nota el buen humor. | Ты используешь много смайликов, видно, что у тебя хорошее настроение.
+Esa foto merece un corazón, no solo un like. | Это фото заслуживает сердечка, а не просто лайка.
+
+#CATEGORY Прощание в чате
+Buenas noches, sueña con algo bonito. | Спокойной ночи, пусть приснится что-то красивое.
+Hablamos mañana, descansa. | Поговорим завтра, отдыхай.
+Escríbeme cuando te despiertes. | Напиши мне, когда проснёшься.
+
+##BLOCK vocabulary | Ключевая лексика
+el mensaje | сообщение
+el chat | переписка / чат
+el audio (de voz) | голосовое сообщение
+la videollamada | видеозвонок
+el emoji | смайлик
+la notificación | уведомление
+en línea | онлайн / в сети
+escribiendo... | печатает...
+visto / vista | статус «прочитано»
+el apodo cariñoso | ласковое прозвище
+coqueto/a | кокетливый / игривый
+extrañar | скучать
+darse las buenas noches | пожелать друг другу спокойной ночи
+la segunda cita | второе свидание
+
+##BLOCK story | Короткий рассказ
+ES: Desde nuestra primera cita, Camila y yo nos escribimos todos los días. A veces le mando un mensaje apenas me despierto, y ella siempre responde rápido, aunque esté ocupada. Nos mandamos audios cuando no tenemos tiempo de escribir, y me encanta escuchar su voz al final del día. Anoche me llamó de sorpresa y hablamos casi una hora sin darnos cuenta. Bromeamos mucho por mensaje, y creo que los dos coqueteamos un poco más de lo normal. Hoy le propuse vernos el sábado, y quedamos en el mismo café de la primera cita. Todavía no sé bien qué vamos a hacer después, pero eso ya lo decidiremos juntos. Mientras tanto, sigo revisando el teléfono cada rato, esperando su próximo mensaje. La extraño incluso cuando hablamos todos los días.
+RU: С нашего первого свидания мы с Камилой переписываемся каждый день. Иногда я пишу ей сообщение, как только просыпаюсь, и она всегда быстро отвечает, даже если занята. Мы отправляем друг другу голосовые, когда нет времени писать, и мне очень нравится слышать её голос в конце дня. Вчера вечером она неожиданно позвонила, и мы проговорили почти час, не заметив этого. Мы много шутим в переписке, и, кажется, мы оба флиртуем чуть больше обычного. Сегодня я предложил встретиться в субботу, и мы договорились в том же кафе, где было первое свидание. Я пока не знаю точно, что мы будем делать потом, но это мы решим вместе. А пока я то и дело проверяю телефон, ожидая её следующего сообщения. Я скучаю по ней, даже когда мы разговариваем каждый день.

@@ -1,0 +1,164 @@
+#TOPIC 6 | Играю с сыном
+
+##BLOCK verb_group | Играем вместе
+
+#WORD jugar | играть
+¿Jugamos un rato antes de cenar? | Поиграем немного перед ужином?
+Me encanta jugar contigo en el parque. | Мне очень нравится играть с тобой на площадке.
+Juega con cuidado, no vayas a golpearte. | Играй осторожно, не ударься.
+
+#WORD construir | строить
+Vamos a construir una torre bien alta. | Давай построим очень высокую башню.
+¿Qué quieres construir hoy con los bloques? | Что ты хочешь сегодня построить из кубиков?
+Construimos un castillo entero esta mañana. | Мы сегодня утром построили целый замок.
+
+#WORD dibujar | рисовать
+¿Quieres dibujar algo conmigo? | Хочешь порисовать со мной?
+Dibuja lo que más te guste. | Нарисуй то, что тебе больше всего нравится.
+Dibujaste un perro precioso, hijo. | Ты нарисовал прекрасную собаку, сынок.
+
+#WORD saltar | прыгать
+No saltes en el sofá, por favor. | Не прыгай на диване, пожалуйста.
+¿Quién salta más alto, tú o yo? | Кто прыгает выше, ты или я?
+Saltamos juntos hasta cansarnos. | Мы прыгали вместе, пока не устали.
+
+#WORD correr | бегать
+No corras tan rápido, espérame. | Не беги так быстро, подожди меня.
+Corremos un poco en el parque antes de volver. | Мы немного бегаем в парке перед тем, как вернуться.
+Le encanta correr detrás de mí. | Ему очень нравится бегать за мной.
+
+#WORD esconderse | прятаться
+Cuéntame hasta diez mientras me escondo. | Посчитай до десяти, пока я прячусь.
+¿Dónde te escondiste esta vez? | Куда ты спрятался в этот раз?
+Siempre se esconde detrás de la misma puerta. | Он всегда прячется за одной и той же дверью.
+
+#WORD compartir | делиться
+Comparte tus juguetes con tus amigos. | Делись своими игрушками с друзьями.
+Me gusta que compartas tus cosas conmigo. | Мне нравится, что ты делишься со мной своими вещами.
+Aprendió a compartir sin que se lo pida. | Он научился делиться, даже когда я его не прошу.
+
+##BLOCK verb_group | Режим дня
+
+#WORD bañarse | купаться
+Es hora de bañarte, ven aquí. | Пора купаться, иди сюда.
+¿Te bañas solo hoy o te ayudo? | Ты сегодня сам купаешься, или тебе помочь?
+Se baña rápido cuando tiene sueño. | Он быстро моется, когда хочет спать.
+
+#WORD vestirse | одеваться
+Vístete rápido, ya se hace tarde. | Одевайся быстро, уже становится поздно.
+¿Puedes vestirte solo esta vez? | Можешь на этот раз одеться сам?
+Le gusta vestirse igual que su papá. | Ему нравится одеваться так же, как папа.
+
+#WORD lavarse los dientes | чистить зубы
+Lávate los dientes antes de dormir. | Почисти зубы перед сном.
+¿Ya te lavaste los dientes esta noche? | Ты уже почистил зубы сегодня вечером?
+Nos lavamos los dientes juntos cada noche. | Мы чистим зубы вместе каждый вечер.
+
+#WORD comer | кушать / есть
+Come un poco más, por favor. | Съешь ещё немного, пожалуйста.
+No quiere comer verduras esta noche. | Он не хочет есть овощи сегодня вечером.
+Comemos juntos casi todas las noches. | Мы едим вместе почти каждый вечер.
+
+#WORD dormir | спать
+Ya es hora de dormir, mi amor. | Уже пора спать, любимый.
+¿Cuántas horas duerme tu hijo normalmente? | Сколько часов обычно спит твой сын?
+Duerme mejor cuando le leo un cuento antes. | Он спит лучше, если я перед этим читаю ему сказку.
+
+#WORD acostarse | ложиться (спать)
+Acuéstate ya, mañana hay que madrugar. | Ложись уже, завтра нужно рано вставать.
+Nos acostamos temprano entre semana. | Мы ложимся спать рано в будни.
+Se acuesta solo desde hace poco. | Он недавно начал ложиться спать самостоятельно.
+
+#WORD recoger | собирать / убирать
+Recoge tus juguetes antes de bañarte. | Убери свои игрушки перед купанием.
+¿Me ayudas a recoger esto? | Поможешь мне это собрать?
+Siempre recoge todo sin que se lo pida dos veces. | Он всегда всё убирает, стоит попросить лишь раз.
+
+##BLOCK verb_group | Забота, похвала и осторожность
+
+#WORD portarse | вести себя
+Te portaste muy bien hoy. | Ты сегодня очень хорошо себя вёл.
+¿Te portas bien con la abuela? | Ты хорошо себя ведёшь с бабушкой?
+Siempre se porta mejor cuando está cansado. | Он всегда лучше себя ведёт, когда устал.
+
+#WORD tener cuidado | быть осторожным
+Ten cuidado con las escaleras. | Будь осторожен на лестнице.
+Ten mucho cuidado, eso quema. | Будь очень осторожен, это горячее.
+Siempre tiene cuidado cuando juega afuera. | Он всегда осторожен, когда играет на улице.
+
+#WORD escuchar | слушать(ся)
+Escúchame un momento, es importante. | Послушай меня минутку, это важно.
+No siempre me escucha a la primera. | Он не всегда слушается с первого раза.
+Escucha bien lo que te digo, por favor. | Внимательно слушай, что я тебе говорю, пожалуйста.
+
+#WORD ayudar | помогать
+¿Me ayudas a guardar esto? | Поможешь мне это убрать?
+Le gusta ayudarme en la cocina. | Ему нравится помогать мне на кухне.
+Ayúdame a ponerte el pijama. | Помоги мне надеть на тебя пижаму.
+
+#WORD abrazar | обнимать
+Ven, te quiero abrazar un momento. | Иди сюда, хочу тебя обнять на минутку.
+Le encanta abrazarme antes de dormir. | Ему очень нравится обнимать меня перед сном.
+Nos abrazamos fuerte antes de las buenas noches. | Мы крепко обнимаемся перед тем, как пожелать спокойной ночи.
+
+#WORD leer | читать
+¿Te leo un cuento esta noche? | Почитать тебе сказку сегодня вечером?
+Le encanta que le lea antes de dormir. | Ему очень нравится, когда я читаю ему перед сном.
+Siempre quiere que le lea el mismo cuento. | Он всегда хочет, чтобы я читал ему одну и ту же сказку.
+
+#WORD cantar | петь
+Le canto una canción para que se duerma. | Я пою ему песню, чтобы он уснул.
+¿Cantamos juntos esta canción otra vez? | Споём вместе эту песню ещё раз?
+Le gusta cantar aunque no sabe toda la letra. | Ему нравится петь, даже если он не знает все слова.
+
+##BLOCK phrase_group | Ходовые фразы — с сыном
+
+#CATEGORY Похвала
+¡Qué bien lo hiciste! | Как же хорошо ты это сделал!
+¡Muy bien, campeón! | Молодец, чемпион!
+Estoy muy orgulloso de ti. | Я очень горжусь тобой.
+
+#CATEGORY Просьбы
+Recoge tus juguetes, por favor. | Убери свои игрушки, пожалуйста.
+Ven aquí un momento. | Иди сюда на минутку.
+Dame la mano para cruzar. | Дай мне руку, чтобы перейти дорогу.
+
+#CATEGORY Режим дня
+Es hora de bañarte. | Пора купаться.
+Ya casi es hora de comer. | Уже почти пора кушать.
+Es hora de dormir, mi amor. | Пора спать, любимый.
+
+#CATEGORY Осторожность
+Cuidado, no corras tan rápido. | Осторожно, не беги так быстро.
+Eso no se toca, quema. | Это нельзя трогать, оно горячее.
+Bájate de ahí, te puedes caer. | Слезь оттуда, ты можешь упасть.
+
+#CATEGORY Предложить поиграть
+¿Jugamos a algo los dos? | Поиграем во что-нибудь вдвоём?
+¿Quieres que construyamos algo? | Хочешь, мы что-нибудь построим?
+¿Te leo algo antes de dormir? | Почитать тебе что-нибудь перед сном?
+
+#CATEGORY Перед сном
+Buenas noches, mi amor. | Спокойной ночи, любимый.
+Que duermas bien. | Спи спокойно.
+Nos vemos en la mañana. | Увидимся утром.
+
+##BLOCK vocabulary | Ключевая лексика
+los juguetes | игрушки
+el cuento | сказка
+la cama | кровать
+el pijama | пижама
+los dientes | зубы
+el abrazo | объятие
+el escondite | прятки
+los bloques | кубики / конструктор
+el dibujo | рисунок
+la siesta | дневной сон / тихий час
+el parque | парк / детская площадка
+el columpio | качели
+cansado/a | уставший
+obediente | послушный
+
+##BLOCK story | Короткий рассказ
+ES: Todas las tardes, después del trabajo, juego un rato con mi hijo antes de la cena. A veces construimos torres con bloques, y casi siempre terminan en el suelo entre risas. Otras veces él dibuja y yo le pregunto qué es cada dibujo, aunque a veces ni él mismo lo sabe. Cuando jugamos al escondite, siempre finjo que no lo encuentro enseguida. Antes de bañarlo, le pido que recoja los juguetes, y casi siempre se porta bien. Le encanta que le lea un cuento en la cama, aunque siempre pide uno más. Le digo que ya es hora de dormir, lo abrazo y le doy las buenas noches. Verlo crecer tan rápido me da un poco de nostalgia. Estos momentos con él son, sin duda, los mejores de mi día.
+RU: Каждый вечер после работы я немного играю с сыном перед ужином. Иногда мы строим башни из кубиков, и они почти всегда падают под наш смех. В другой раз он рисует, а я спрашиваю, что изображено на каждом рисунке, хотя иногда он и сам не знает. Когда мы играем в прятки, я всегда делаю вид, что не сразу его нахожу. Перед купанием я прошу его собрать игрушки, и он почти всегда слушается. Ему очень нравится, когда я читаю ему сказку в кровати, хотя он всегда просит ещё одну. Я говорю ему, что пора спать, обнимаю его и желаю спокойной ночи. Видеть, как быстро он растёт, немного меня грустит. Эти моменты с ним, без сомнения, лучшие за весь день.

@@ -1,0 +1,170 @@
+#TOPIC 5 | В супермаркете
+
+##BLOCK verb_group | Искать и находить продукты
+
+#WORD comprar | покупать
+Voy a comprar verduras frescas para toda la semana. | Куплю свежие овощи на всю неделю.
+¿Qué necesitas comprar tú además de la leche? | Что тебе нужно купить, кроме молока?
+Compro casi todo en el mismo supermercado. | Я покупаю почти всё в одном и том же супермаркете.
+
+#WORD buscar | искать
+Estoy buscando el pan integral, no lo encuentro. | Ищу цельнозерновой хлеб, не могу найти.
+¿Buscas algo en especial o solo miras? | Ты что-то конкретное ищешь, или просто смотришь?
+Siempre busco las ofertas antes de comprar. | Я всегда ищу акции перед покупкой.
+
+#WORD encontrar | находить
+Por fin encontré el aceite que buscaba. | Наконец-то нашёл масло, которое искал.
+No encuentro los huevos, ¿los cambiaron de pasillo? | Не могу найти яйца, их перенесли в другой ряд?
+Aquí siempre encuentras fruta fresca y barata. | Здесь всегда найдёшь свежие и недорогие фрукты.
+
+#WORD necesitar | нуждаться / быть нужным
+Necesito leche, huevos y un poco de queso. | Мне нужны молоко, яйца и немного сыра.
+¿Necesitas algo más antes de que pague? | Тебе нужно что-то ещё, прежде чем я заплачу?
+No necesito tanto, solo lo de la lista. | Мне столько не нужно, только то, что в списке.
+
+#WORD llevar | брать с собой / нести
+Voy a llevar dos bolsas, con eso alcanza. | Возьму два пакета, этого хватит.
+¿Llevamos también agua, o ya tenemos en casa? | Возьмём ещё воды, или дома уже есть?
+Llevo siempre mi propia bolsa para no gastar en una nueva. | Я всегда беру свой пакет, чтобы не тратиться на новый.
+
+#WORD faltar | не хватать
+Me falta azúcar, la olvidé por completo. | Мне не хватает сахара, я про него совсем забыл.
+¿Qué te falta todavía en la lista? | Чего тебе ещё не хватает в списке?
+Nos falta algo para la cena de hoy. | Нам чего-то не хватает для сегодняшнего ужина.
+
+#WORD quedar | оставаться (в наличии)
+Ya no queda arroz en la despensa. | Риса в кладовке больше не осталось.
+¿Cuánto café te queda en casa? | Сколько у тебя дома осталось кофе?
+Solo quedan dos tomates, hay que comprar más. | Осталось только два помидора, нужно купить ещё.
+
+##BLOCK verb_group | В магазине — выбирать и платить
+
+#WORD elegir | выбирать
+Es difícil elegir entre tantas marcas de yogur. | Трудно выбрать среди стольких марок йогурта.
+Elijo siempre la fruta más madura. | Я всегда выбираю самый спелый фрукт.
+¿Tú qué eliges, pan blanco o integral? | А ты что выбираешь, белый хлеб или цельнозерновой?
+
+#WORD escoger | выбирать (из вариантов)
+Escogí el pollo más fresco que encontré. | Я выбрал самую свежую курицу, которую нашёл.
+¿Puedes escoger tú los tomates hoy? | Можешь сегодня сам выбрать помидоры?
+Nunca sé qué escoger cuando hay tantas opciones. | Никогда не знаю, что выбрать, когда так много вариантов.
+
+#WORD pesar | взвешивать
+Tengo que pesar las manzanas antes de pagar. | Мне нужно взвесить яблоки перед оплатой.
+¿Dónde se pesan las verduras aquí? | Где здесь взвешивают овощи?
+Este paquete pesa más de lo que pensaba. | Эта упаковка весит больше, чем я думал.
+
+#WORD costar | стоить
+¿Cuánto cuesta el kilo de queso? | Сколько стоит килограмм сыра?
+Este vino cuesta más de lo que esperaba. | Это вино стоит дороже, чем я ожидал.
+Las frutas cuestan menos en este supermercado. | Фрукты стоят дешевле в этом супермаркете.
+
+#WORD pagar | платить
+Voy a pagar con tarjeta, no traigo efectivo. | Заплачу картой, наличных с собой нет.
+¿Pagamos juntos o cada uno lo suyo? | Заплатим вместе, или каждый за своё?
+Siempre pago yo cuando vamos juntos al súper. | Я всегда плачу, когда мы идём в супермаркет вместе.
+
+#WORD hacer la compra | делать покупки (закупаться)
+Hago la compra los sábados por la mañana. | Я закупаюсь по субботам утром.
+¿Quieres hacer la compra conmigo esta semana? | Хочешь закупиться со мной на этой неделе?
+Prefiero hacer la compra con lista, así no olvido nada. | Предпочитаю закупаться по списку, так ничего не забываю.
+
+#WORD gastar | тратить
+Intento no gastar demasiado en cosas dulces. | Стараюсь не тратить слишком много на сладкое.
+¿Cuánto gastaste hoy en el supermercado? | Сколько ты сегодня потратил в супермаркете?
+Gasto menos si voy con una lista clara. | Я трачу меньше, если иду с чётким списком.
+
+##BLOCK verb_group | Заканчиваем и раскладываем покупки
+
+#WORD olvidar | забывать
+Siempre olvido algo importante en la lista. | Я всегда забываю что-то важное в списке.
+No olvides comprar pan para mañana. | Не забудь купить хлеб на завтра.
+Olvidé la bolsa reutilizable otra vez. | Я снова забыл многоразовый пакет.
+
+#WORD revisar | проверять
+Reviso la lista antes de salir de casa. | Я проверяю список перед выходом из дома.
+¿Puedes revisar si tenemos aceite todavía? | Можешь проверить, есть ли у нас ещё масло?
+Siempre reviso el recibo, por si hay un error. | Я всегда проверяю чек, вдруг есть ошибка.
+
+#WORD guardar | убирать / хранить
+Voy a guardar las compras antes de que se calienten. | Уберу покупки, пока они не нагрелись.
+Guarda la carne en el congelador enseguida. | Сразу убери мясо в морозилку.
+¿Dónde guardamos las bolsas vacías? | Куда мы убираем пустые пакеты?
+
+#WORD acabarse | заканчиваться (о продуктах)
+Se nos acabó el café esta mañana. | У нас сегодня утром закончился кофе.
+Siempre se acaba la leche más rápido de lo que pienso. | Молоко всегда заканчивается быстрее, чем я думаю.
+Si se acaba el pan, avísame para comprar más. | Если хлеб закончится, скажи мне, куплю ещё.
+
+#WORD recoger | забирать / собирать
+Voy a recoger el pedido en la entrada. | Заберу заказ у входа.
+¿Puedes recoger las bolsas mientras pago? | Можешь забрать пакеты, пока я плачу?
+Recojo siempre mi pedido en línea los viernes. | Я всегда забираю свой онлайн-заказ по пятницам.
+
+#WORD devolver | возвращать
+Voy a devolver este producto, está vencido. | Верну этот товар, у него истёк срок годности.
+¿Puedo devolver algo si viene dañado? | Могу я вернуть что-то, если оно повреждено?
+Nunca es fácil devolver algo sin el recibo. | Никогда не легко вернуть что-то без чека.
+
+#WORD probar | пробовать (дегустировать)
+Me gusta probar quesos nuevos cuando los tienen. | Мне нравится пробовать новые сыры, когда они есть.
+¿Podemos probar esta aceituna antes de comprarla? | Можем попробовать эту оливку перед покупкой?
+Probé un pan diferente y me encantó. | Я попробовал другой хлеб, и он мне очень понравился.
+
+##BLOCK phrase_group | Ходовые фразы — покупки
+
+#CATEGORY Где найти
+¿Dónde están las verduras, por favor? | Где овощи, скажите, пожалуйста?
+¿Sabes en qué pasillo está el arroz? | Знаешь, в каком ряду рис?
+¿Dónde queda la sección de lácteos? | Где находится отдел молочных продуктов?
+
+#CATEGORY Сколько стоит
+¿Cuánto cuesta esto? | Сколько это стоит?
+¿A cómo está el kilo de tomate hoy? | Почём сегодня килограмм помидоров?
+¿Hay algo más barato de esta misma marca? | Есть что-то подешевле этой же марки?
+
+#CATEGORY На кассе
+¿Es en efectivo o con tarjeta? | Наличными или картой?
+¿Me da una bolsa, por favor? | Дайте мне пакет, пожалуйста?
+Creo que hay un error en el recibo. | Кажется, в чеке ошибка.
+
+#CATEGORY Не хватает / закончилось
+Ya no hay leche en casa. | Дома больше нет молока.
+Se nos acabó el azúcar otra vez. | У нас снова закончился сахар.
+Falta algo para la receta de hoy. | Не хватает кое-чего для сегодняшнего рецепта.
+
+#CATEGORY Есть / нет в наличии
+¿Tienen esto en otra presentación? | У вас это есть в другой упаковке?
+¿Hay descuento en esto? | На это есть скидка?
+¿Tienen algo sin azúcar? | У вас есть что-то без сахара?
+
+#CATEGORY Хочу
+Quiero algo rápido de preparar hoy. | Хочу сегодня что-то, что быстро готовится.
+Quiero probar algo nuevo esta semana. | Хочу попробовать что-то новое на этой неделе.
+No quiero gastar tanto hoy. | Не хочу сегодня тратить так много.
+
+#CATEGORY Нужно
+Necesito comprar algo especial para mi hijo. | Мне нужно купить что-то особенное для сына.
+Necesito una bolsa más grande. | Мне нужен пакет побольше.
+No necesito tanto, con esto alcanza. | Мне столько не нужно, этого хватит.
+
+##BLOCK vocabulary | Ключевая лексика
+la verdura | овощ
+la fruta | фрукт
+la carne | мясо
+el pescado | рыба
+los lácteos | молочные продукты
+el pan | хлеб
+la caja | касса
+la fila / la cola | очередь
+la bolsa | пакет
+el carrito | тележка
+la lista de compras | список покупок
+la oferta / el descuento | акция / скидка
+el recibo | чек
+el pasillo | ряд / отдел (в магазине)
+el cambio / suelto | сдача / мелочь
+
+##BLOCK story | Короткий рассказ
+ES: Los sábados hago la compra en el supermercado cerca de casa, a veces solo y a veces con mi hijo. Siempre llevo una lista para no olvidar nada importante. Primero busco las verduras frescas y las peso yo mismo; me gusta elegir la fruta más madura. Después voy a la sección de lácteos, aunque casi nunca encuentro el queso que más me gusta. Si algo cuesta demasiado, prefiero probar una marca diferente. Mi hijo siempre quiere escoger algo dulce, y casi nunca le digo que no. Cuando llegamos a la caja, reviso el recibo con cuidado, porque a veces hay un error. Si nos falta algo importante, simplemente vuelvo otro día. Al final, guardamos todo en el refrigerador juntos, y él se siente muy orgulloso de haber ayudado.
+RU: По субботам я хожу за покупками в супермаркет рядом с домом — иногда один, а иногда с сыном. Я всегда беру с собой список, чтобы не забыть ничего важного. Сначала я ищу свежие овощи и сам их взвешиваю; мне нравится выбирать самый спелый фрукт. Потом иду в отдел молочных продуктов, хотя почти никогда не нахожу сыр, который мне больше всего нравится. Если что-то стоит слишком дорого, я предпочитаю попробовать другую марку. Мой сын всегда хочет выбрать что-нибудь сладкое, и я почти никогда не говорю ему нет. Когда мы доходим до кассы, я внимательно проверяю чек, потому что иногда бывает ошибка. Если нам не хватает чего-то важного, я просто возвращаюсь в другой день. В конце мы вместе убираем всё в холодильник, и он очень гордится тем, что помог.
