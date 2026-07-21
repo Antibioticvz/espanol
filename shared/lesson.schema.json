@@ -1,0 +1,190 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/Antibioticvz/espanol/main/shared/lesson.schema.json",
+  "title": "Lesson",
+  "description": "Контракт lesson.json между Combine (генератор, Desktop) и Audio Learner (iOS). Единственный источник истины для обоих приложений.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "topic_id",
+    "topic_number",
+    "title_ru",
+    "created_at",
+    "generator_version",
+    "config",
+    "stats",
+    "blocks"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Версия схемы lesson.json (semver). iOS отклоняет несовместимые major-версии.",
+      "pattern": "^\\d+\\.\\d+$",
+      "examples": ["1.0"]
+    },
+    "topic_id": {
+      "type": "string",
+      "description": "Уникальный идентификатор темы, kebab-case. Является primary key на iOS.",
+      "pattern": "^[0-9]{2}-[a-z0-9-]+$",
+      "examples": ["04-hablar-de-mi-mismo"]
+    },
+    "topic_number": { "type": "integer", "minimum": 1 },
+    "title_ru": { "type": "string", "minLength": 1 },
+    "title_es": { "type": ["string", "null"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "generator_version": { "type": "string" },
+    "config": {
+      "type": "object",
+      "description": "Параметры, с которыми генерировался урок (информационно для iOS).",
+      "additionalProperties": false,
+      "required": ["provider", "model", "voice_es", "voice_ru"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["elevenlabs", "mock_say"],
+          "description": "elevenlabs — реальный API; mock_say — локальный macOS `say` (бесплатный режим разработки)."
+        },
+        "model": {
+          "type": "string",
+          "description": "ID модели TTS, напр. eleven_multilingual_v2, eleven_flash_v2_5, или macos_say для mock.",
+          "examples": ["eleven_multilingual_v2", "eleven_flash_v2_5", "macos_say"]
+        },
+        "voice_es": { "$ref": "#/definitions/voice" },
+        "voice_ru": { "$ref": "#/definitions/voice" },
+        "stability": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "similarity_boost": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "seed": { "type": ["integer", "null"] }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phrase_count", "vocab_count", "story_count", "total_elements", "characters_es", "characters_ru", "total_characters"],
+      "properties": {
+        "phrase_count": { "type": "integer", "minimum": 0 },
+        "vocab_count": { "type": "integer", "minimum": 0 },
+        "story_count": { "type": "integer", "minimum": 0 },
+        "total_elements": { "type": "integer", "minimum": 0 },
+        "characters_es": { "type": "integer", "minimum": 0 },
+        "characters_ru": { "type": "integer", "minimum": 0 },
+        "total_characters": { "type": "integer", "minimum": 0 },
+        "estimated_cost_usd": { "type": ["number", "null"] },
+        "actual_cost_usd": { "type": ["number", "null"] },
+        "generation_duration_seconds": { "type": ["number", "null"] },
+        "file_size_mb": { "type": ["number", "null"] }
+      }
+    },
+    "blocks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/block" }
+    }
+  },
+  "definitions": {
+    "voice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "description": "voice_id ElevenLabs или имя голоса macOS say" },
+        "name": { "type": "string", "description": "Человекочитаемое имя голоса" }
+      }
+    },
+    "audio_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["es", "ru"],
+      "properties": {
+        "es": { "type": "string", "pattern": "^audio/es/[A-Za-z0-9._-]+\\.mp3$" },
+        "ru": { "type": "string", "pattern": "^audio/ru/[A-Za-z0-9._-]+\\.mp3$" }
+      }
+    },
+    "duration_pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["es", "ru"],
+      "properties": {
+        "es": { "type": "integer", "minimum": 0, "description": "мс" },
+        "ru": { "type": "integer", "minimum": 0, "description": "мс" }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "generating", "done", "failed"],
+      "description": "В экспортированном ZIP все элементы должны быть done. Прочие статусы — рабочее состояние Combine (resume)."
+    },
+    "phrase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "es", "ru", "audio", "duration_ms", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[0-9]{2}-(b[0-9]+-)?[a-z0-9-]+-[0-9]{2}$", "examples": ["04-b1-llamarse-01"] },
+        "es": { "type": "string", "minLength": 1 },
+        "ru": { "type": "string", "minLength": 1 },
+        "audio": { "$ref": "#/definitions/audio_pair" },
+        "duration_ms": { "$ref": "#/definitions/duration_pair" },
+        "status": { "$ref": "#/definitions/status" },
+        "id3_tags_written": { "type": "boolean" },
+        "generated_at": { "type": ["string", "null"], "format": "date-time" },
+        "error": { "type": ["string", "null"], "description": "Причина последней ошибки, если status=failed" }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "order_index", "phrases"],
+      "properties": {
+        "key": { "type": "string", "description": "Слаг группы: инфинитив глагола (llamarse) или слаг категории (conocer)" },
+        "title_ru": { "type": ["string", "null"], "description": "Название категории для phrase_group (напр. «Первое знакомство»)" },
+        "translation_ru": { "type": ["string", "null"], "description": "Перевод инфинитива для verb_group (напр. «зваться»)" },
+        "order_index": { "type": "integer", "minimum": 0 },
+        "phrases": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/phrase" } }
+      }
+    },
+    "block": {
+      "type": "object",
+      "required": ["block_id", "type", "title_ru", "order_index"],
+      "properties": {
+        "block_id": { "type": "string", "pattern": "^b[0-9]+$" },
+        "type": { "type": "string", "enum": ["verb_group", "phrase_group", "vocabulary", "story"] },
+        "title_ru": { "type": "string" },
+        "title_es": { "type": ["string", "null"] },
+        "order_index": { "type": "integer", "minimum": 0 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "enum": ["verb_group", "phrase_group"] } } },
+          "then": {
+            "required": ["groups"],
+            "properties": { "groups": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/group" } } }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "vocabulary" } } },
+          "then": {
+            "required": ["words"],
+            "properties": { "words": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/phrase" } } }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "story" } } },
+          "then": {
+            "required": ["text_es", "text_ru", "audio", "duration_ms", "status"],
+            "properties": {
+              "text_es": { "type": "string", "minLength": 1 },
+              "text_ru": { "type": "string", "minLength": 1 },
+              "audio": { "$ref": "#/definitions/audio_pair" },
+              "duration_ms": { "$ref": "#/definitions/duration_pair" },
+              "status": { "$ref": "#/definitions/status" },
+              "split_by_phrase": { "type": "boolean" },
+              "id3_tags_written": { "type": "boolean" },
+              "generated_at": { "type": ["string", "null"], "format": "date-time" },
+              "error": { "type": ["string", "null"] }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

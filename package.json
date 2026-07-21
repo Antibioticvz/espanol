@@ -1,0 +1,15 @@
+{
+  "name": "espanol",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Aprender Español: Combine (генератор аудио-уроков) + Audio Learner (iOS)",
+  "type": "module",
+  "scripts": {
+    "make-fixture": "node scripts/make-fixture.mjs"
+  },
+  "devDependencies": {
+    "@breezystack/lamejs": "^1.2.7",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
+  }
+}

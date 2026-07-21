@@ -1,0 +1,32 @@
+#TOPIC 4 | Рассказ о себе
+
+##BLOCK verb_group | Кто я — происхождение и факты
+
+#WORD llamarse | зваться
+Me llamo Victor. | Меня зовут Виктор.
+¿Cómo te llamas tú? | Как тебя зовут?
+Todos me llaman Vic, para abreviar. | Все зовут меня Вик, для краткости.
+
+#WORD tener | иметь (возраст)
+Tengo cuarenta años. | Мне сорок лет.
+¿Cuántos años tienes tú? | Сколько лет тебе?
+
+##BLOCK phrase_group | Ходовые фразы
+
+#CATEGORY Первое знакомство
+Mucho gusto, soy Victor. | Очень приятно, я Виктор.
+Encantado de conocerte. | Приятно познакомиться.
+
+#CATEGORY О работе
+Soy programador. | Я программист.
+Trabajo a distancia. | Я работаю удалённо.
+
+##BLOCK vocabulary | Ключевая лексика
+el programador | программист
+a distancia | удалённо
+la familia | семья
+el hermano | брат
+
+##BLOCK story | Короткий рассказ
+ES: Me llamo Victor y tengo cuarenta años. Soy programador y trabajo a distancia. Tengo una familia grande y un hermano menor.
+RU: Меня зовут Виктор, мне сорок лет. Я программист и работаю удалённо. У меня большая семья и младший брат.

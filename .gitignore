@@ -1,0 +1,30 @@
+# Node
+node_modules/
+dist/
+out/
+release/
+*.log
+.npm/
+
+# Electron
+combine/.vite/
+combine/dist-electron/
+
+# macOS
+.DS_Store
+
+# Env / secrets
+.env
+.env.*
+
+# Xcode / iOS (xcodeproj генерируется XcodeGen — не коммитим)
+ios/*.xcodeproj
+ios/DerivedData/
+ios/build/
+xcuserdata/
+*.xcuserstate
+*.xcresult
+
+# Временные
+tmp/
+*.tmp
