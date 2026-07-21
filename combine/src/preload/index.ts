@@ -7,6 +7,28 @@ import type { TtsModel, TtsVoice } from '../core/tts/tts-provider'
 import type { LessonSummary } from '../core/file/file.service'
 import type { TestGenerationParams, TestGenerationResult } from '../main/test-generation'
 import type { ApiKeyStatus } from '../core/settings/settings.service'
+import type {
+  CombineIpcApi,
+  EstimateCostInput,
+  EstimateCostResult,
+  ExportAnkiInput,
+  ExportAnkiResult,
+  ExportZipResult,
+  GenerationRunRef,
+  GetPhraseAudioInput,
+  GetPhraseAudioResult,
+  LibraryEntry,
+  ListVoicesInput,
+  ParseTextResult,
+  StartGenerationInput,
+  StartGenerationResult,
+  TestConnectionInput,
+  TestConnectionResult,
+  TestSnippetInput,
+  TestSnippetResult,
+  UnsubscribeFn,
+  VoiceOption
+} from '../shared/ipc'
 
 /**
  * Единственная поверхность, которую renderer видит как `window.combine` (contextIsolation: true,
@@ -75,3 +97,56 @@ const api = {
 contextBridge.exposeInMainWorld('combine', api)
 
 export type CombineApi = typeof api
+
+/**
+ * ДОПОЛНИТЕЛЬНО (не вместо `combine` выше) экспонируем плоский typed-контракт, которого ждут
+ * renderer/lib/api.ts + adapters/ipcAdapter.ts (ветка feat/combine-ui, см. src/shared/ipc.ts —
+ * `CombineIpcApi`, задокументировано как `window.combineApi`). Направление стыковки и разбивка
+ * каналов на «переиспользуемые 1:1» / «новые combine:api:*» — см. docs/DECISIONS.md D-22.
+ *
+ * Реализация НЕ дублирует бизнес-логику — это тонкий маппинг имён/форм поверх ipcMain-хендлеров
+ * (часть — уже существующие выше каналы `combine:*`, часть — новые `combine:api:*`, см.
+ * src/main/ipc-handlers.ts#registerFlatApiHandlers и src/main/combine-api-support.ts).
+ */
+const combineApi: CombineIpcApi = {
+  parseText: (raw: string): Promise<ParseTextResult> => ipcRenderer.invoke('combine:parse-text', raw),
+
+  getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('combine:settings:get'),
+  saveSettings: (settings: AppSettings): Promise<void> => ipcRenderer.invoke('combine:settings:save', settings),
+
+  testConnection: (input: TestConnectionInput): Promise<TestConnectionResult> =>
+    ipcRenderer.invoke('combine:api:test-connection', input),
+  listVoices: (input: ListVoicesInput): Promise<VoiceOption[]> => ipcRenderer.invoke('combine:api:list-voices', input),
+  estimateCost: (input: EstimateCostInput): Promise<EstimateCostResult> => ipcRenderer.invoke('combine:api:estimate-cost', input),
+
+  startGeneration: (input: StartGenerationInput): Promise<StartGenerationResult> =>
+    ipcRenderer.invoke('combine:api:start-generation', input),
+  // pause/resume/cancel игнорируют GenerationRunRef.topicId — main держит ОДИН активный сеанс
+  // генерации за раз (см. GenerationSession), явный topicId в контракте — задел на будущее
+  // мультисессионности, а не то, от чего сегодня зависит выбор канала.
+  pauseGeneration: (_input: GenerationRunRef): Promise<void> => ipcRenderer.invoke('combine:generation:pause'),
+  resumeGeneration: (_input: GenerationRunRef): Promise<void> => ipcRenderer.invoke('combine:generation:resume'),
+  cancelGeneration: (_input: GenerationRunRef): Promise<void> => ipcRenderer.invoke('combine:generation:cancel'),
+  onGenerationProgress: (callback: (event: GenerationProgressEvent) => void): UnsubscribeFn => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: GenerationProgressEvent): void => callback(payload)
+    ipcRenderer.on('combine:generation:progress', listener)
+    return () => ipcRenderer.removeListener('combine:generation:progress', listener)
+  },
+
+  listLibrary: (): Promise<LibraryEntry[]> => ipcRenderer.invoke('combine:api:list-library'),
+  exportZip: (input: GenerationRunRef): Promise<ExportZipResult> => ipcRenderer.invoke('combine:api:export-zip', input),
+  regenerateAll: (input: GenerationRunRef): Promise<StartGenerationResult> => ipcRenderer.invoke('combine:api:regenerate-all', input),
+  regenerateFailed: (input: GenerationRunRef): Promise<StartGenerationResult> =>
+    ipcRenderer.invoke('combine:api:regenerate-failed', input),
+  deleteLesson: (input: GenerationRunRef): Promise<void> => ipcRenderer.invoke('combine:api:delete-lesson', input),
+  openLessonFolder: (input: GenerationRunRef): Promise<void> => ipcRenderer.invoke('combine:api:open-lesson-folder', input),
+
+  testSnippet: (input: TestSnippetInput): Promise<TestSnippetResult> => ipcRenderer.invoke('combine:api:test-snippet', input),
+  getPhraseAudio: (input: GetPhraseAudioInput): Promise<GetPhraseAudioResult> =>
+    ipcRenderer.invoke('combine:api:get-phrase-audio', input),
+
+  /** v1.1 — экспорт урока в Anki .apkg (см. docs/SPEC_COMBINE.md доп. + core/anki/anki-export.service.ts). */
+  exportAnki: (input: ExportAnkiInput): Promise<ExportAnkiResult> => ipcRenderer.invoke('combine:api:export-anki', input)
+}
+
+contextBridge.exposeInMainWorld('combineApi', combineApi)

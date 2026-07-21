@@ -11,12 +11,22 @@ Desktop-генератор аудио-уроков испанского язык
 
 ## Статус
 
-Main-процесс (все core-сервисы), CLI и IPC-мост — реализованы и покрыты тестами. Renderer
-(4 экрана — Импорт/Настройки/Генерация/Библиотека) строится параллельно в ветке
-`feat/combine-ui`; в этой ветке вместо него — минимальная заглушка (`src/renderer/App.tsx`),
-нужная только для того, чтобы `npm run build`/`npm run dev:web` имели точку входа. При merge
-она будет заменена настоящим интерфейсом; каналы IPC (`src/main/ipc-handlers.ts`,
-`src/preload/index.ts`) — рабочий вариант этого агента, финальные имена согласует оркестратор.
+Версия **1.1.0**. Main-процесс (все core-сервисы), renderer (4 экрана — Импорт/Настройки/
+Генерация/Библиотека) и IPC-мост между ними — реализованы, состыкованы и покрыты тестами
+(`window.combineApi`, см. `docs/DECISIONS.md` D-22): preload экспонирует typed-контракт
+`src/shared/ipc.ts#CombineIpcApi` поверх main-хендлеров (`src/main/ipc-handlers.ts`), а renderer
+(`src/renderer/lib/api.ts`) использует его напрямую в Electron и `mockAdapter` в `dev:web`.
+
+## Новое в 1.1
+
+- **Пакетная генерация из CLI** — `generate --input <папка>` обрабатывает все `*.txt` внутри по
+  алфавиту последовательно; ошибка одной темы не прерывает остальные (сводка ok/failed в конце,
+  ненулевой код возврата при частичном провале). См. `docs/DECISIONS.md` D-22.
+- **Экспорт в Anki (.apkg)** — CLI `export-anki`, IPC-операция и пункт меню карточки урока в
+  Библиотеке. Колода = название урока; карточки из всех фраз/слов (рассказ не включается). Без
+  нативных зависимостей — SQLite-файл коллекции собирается через `sql.js` (WASM).
+- **DMG для macOS** — `npm run dist:mac` (electron-builder, unsigned — личное использование) →
+  `release/Combine-1.1.0.dmg`.
 
 ## Требования
 
@@ -33,11 +43,14 @@ npm run dev:web              # renderer в браузере с mock-IPC — см
 npm run build                # electron-vite build (main+preload+renderer) → out/
 npm run typecheck            # tsc --noEmit (main/preload/core/cli, затем renderer)
 npm test                     # vitest run — без единого реального сетевого вызова
-npm run cli -- <parse|generate|export> ...
+npm run cli -- <parse|generate|export|export-anki> ...
+npm run dist:mac              # electron-builder --mac dmg (unsigned) → release/Combine-1.1.0.dmg
 ```
 
-`npm run build` собирает приложение, но **не** упаковывает установщик (`electron-builder` здесь
-не используется/не запускается) — это сознательно оставлено оркестратору.
+`npm run build` собирает приложение (main+preload+renderer → `out/`), но не упаковывает
+установщик. `npm run dist:mac` делает и то, и другое: пересобирает `out/` и упаковывает
+неподписанный `.dmg` для macOS через `electron-builder` (конфиг — `combine/electron-builder.yml`,
+иконка — `combine/build/icon.icns`, сборка не коммитится — `release/` в `.gitignore`).
 
 ## Провайдеры синтеза речи
 
@@ -77,8 +90,15 @@ npm run cli -- generate \
   --model eleven_multilingual_v2 \
   --out ~/lessons --export-zip
 
+# Пакетная генерация — --input указывает на ПАПКУ: все *.txt по алфавиту, последовательно,
+# ошибка одной темы не прерывает остальные (сводка ok/failed + ненулевой код при частичном провале)
+npm run cli -- generate --input ../shared/course --provider mock_say --out ~/lessons --export-zip
+
 # Экспорт уже сгенерированного урока в ZIP отдельно
 npm run cli -- export --lesson ~/lessons/02-gotovka-i-kuhnya
+
+# Экспорт урока в колоду Anki (.apkg) — карточки из фраз+слов, story не включается
+npm run cli -- export-anki --lesson ~/lessons/02-gotovka-i-kuhnya
 ```
 
 Опции `generate`: `--concurrency`, `--max-retries`, `--delay-ms`, `--timeout-ms`, `--stability`,
@@ -133,19 +153,23 @@ combine/
 │   │   ├── file/        FileService (диск, lesson.json, ID3, ZIP, библиотека)
 │   │   ├── settings/    SettingsService + Encryptor (Electron-независимый)
 │   │   ├── cost/        CostCalculator
+│   │   ├── anki/        Anki .apkg export (sql.js, без нативных зависимостей) — v1.1
 │   │   ├── types/       Общие типы (lesson-json.ts зеркалит shared/lesson.schema.json)
 │   │   └── util/        slug/транслитерация, WAV→MP3, общие пути
-│   ├── main/           Electron main: окно, IPC-хендлеры, сеанс генерации, safeStorage
-│   ├── preload/        contextBridge → window.combine
-│   ├── renderer/        ЗАГЛУШКА (см. «Статус» выше)
-│   └── cli/             generate/parse/export
-└── README.md            (этот файл)
+│   ├── main/            Electron main: окно, IPC-хендлеры (combine:* + combine:api:*), сеанс
+│   │                     генерации, safeStorage
+│   ├── preload/         contextBridge → window.combine (историческая форма) + window.combineApi
+│   │                     (typed-контракт shared/ipc.ts, см. docs/DECISIONS.md D-22)
+│   ├── renderer/         4 экрана (Импорт/Настройки/Генерация/Библиотека), React Query
+│   └── cli/              generate (одиночный файл или пакет папки)/parse/export/export-anki
+├── electron-builder.yml  DMG-конфиг (unsigned, см. npm run dist:mac)
+├── build/                icon.icns/icon.png (иконка бандла + dev Dock/окно)
+└── README.md             (этот файл)
 ```
 
 ## Известные ограничения
 
-- Renderer — заглушка (см. «Статус»).
-- macOS only (провайдер `mock_say`, ID3/Keychain — предполагают macOS; см. §13 спеки).
+- macOS only (провайдер `mock_say`, ID3/Keychain, DMG-упаковка — предполагают macOS; см. §13 спеки).
 - Экспорт для реального ElevenLabs (401/429/5xx-поведение) проверялся против локального
   HTTP-стаба, не против настоящего API — ручная проверка с реальным ключом требуется отдельно
   (см. `docs/DECISIONS.md` D-12).

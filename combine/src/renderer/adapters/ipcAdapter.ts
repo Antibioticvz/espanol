@@ -36,5 +36,6 @@ export const ipcAdapter: CombineIpcApi = {
   deleteLesson: (input) => bridge().deleteLesson(input),
   openLessonFolder: (input) => bridge().openLessonFolder(input),
   testSnippet: (input) => bridge().testSnippet(input),
-  getPhraseAudio: (input) => bridge().getPhraseAudio(input)
+  getPhraseAudio: (input) => bridge().getPhraseAudio(input),
+  exportAnki: (input) => bridge().exportAnki(input)
 }

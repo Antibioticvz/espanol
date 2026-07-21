@@ -22,6 +22,8 @@ import type {
   CombineIpcApi,
   EstimateCostInput,
   EstimateCostResult,
+  ExportAnkiInput,
+  ExportAnkiResult,
   ExportZipResult,
   GenerationRunRef,
   GetPhraseAudioInput,
@@ -476,6 +478,30 @@ async function testSnippet(input: TestSnippetInput): Promise<TestSnippetResult> 
   }
 }
 
+/** Порядок веток важен для TS narrowing — см. комментарий у flattenFromLessonJson выше. Story
+ * намеренно пропускается: Anki-карточки делаются только из фраз/слов (см. shared/ipc.ts#exportAnki). */
+function countAnkiItems(lessonJson: LessonJson): number {
+  let count = 0
+  for (const block of lessonJson.blocks) {
+    if (block.type === 'vocabulary') {
+      count += block.words.length
+    } else if (block.type === 'story') {
+      continue
+    } else {
+      for (const group of block.groups) count += group.phrases.length
+    }
+  }
+  return count
+}
+
+async function exportAnki({ topicId }: ExportAnkiInput): Promise<ExportAnkiResult> {
+  await delay(400)
+  const entry = library.find((e) => e.lesson.topic_id === topicId)
+  if (!entry) throw new Error(`Урок "${topicId}" не найден в библиотеке.`)
+  const noteCount = countAnkiItems(entry.lesson)
+  return { apkgPath: `~/Downloads/lesson-${topicId}.apkg`, noteCount, mediaCount: noteCount * 2 }
+}
+
 async function getPhraseAudio(input: GetPhraseAudioInput): Promise<GetPhraseAudioResult> {
   await delay(150)
   const entry = library.find((e) => e.lesson.topic_id === input.topicId)
@@ -508,5 +534,6 @@ export const mockAdapter: CombineIpcApi = {
   deleteLesson,
   openLessonFolder,
   testSnippet,
-  getPhraseAudio
+  getPhraseAudio,
+  exportAnki
 }

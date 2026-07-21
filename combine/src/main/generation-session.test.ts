@@ -9,6 +9,7 @@ import { createDefaultSettings } from '../core/types/settings'
 import type { GenerationProgressEvent } from '../core/types/generation'
 import type { LessonJson } from '../core/types/lesson-json'
 import { getSharedSchemaPath } from '../core/util/paths'
+import { ParserService } from '../core/parser/parser.service'
 
 // getSharedSchemaPath() резолвит путь относительно СВОЕГО СОБСТВЕННОГО расположения
 // (src/core/util/paths.ts), а не относительно вызывающего файла — специально, чтобы избежать
@@ -160,5 +161,51 @@ describe('GenerationSession (main/**, реальный MockSayService — бес
     await waitFor(() => !session2.isActive())
     const lessonJson2 = await fileService.readLessonJson(outputDir, '77-test-sessii')
     expect(lessonJson2.stats.actual_cost_usd).toBeCloseTo(0.02, 4)
+  }, 30000)
+
+  it('start() возвращает {topicId, lesson} (не только topicId) — нужно плоскому combineApi.startGeneration (D-22)', async () => {
+    const session = new GenerationSession()
+    const { topicId, lesson } = await session.start({ inputText: MINI_LESSON, settings: settingsFor() }, () => undefined)
+    expect(topicId).toBe('77-test-sessii')
+    expect(lesson.topic_id).toBe('77-test-sessii')
+    expect(lesson.blocks[0].type).toBe('vocabulary')
+    await waitFor(() => !session.isActive())
+  }, 30000)
+
+  it('startParsed() — вариант start() для уже разобранного ParsedLesson (плоский контракт shared/ipc.ts#startGeneration)', async () => {
+    const parseResult = new ParserService().parse(MINI_LESSON)
+    expect(parseResult.lesson).not.toBeNull()
+
+    const session = new GenerationSession()
+    const events: GenerationProgressEvent[] = []
+    const { topicId, lesson } = await session.startParsed(
+      { lesson: parseResult.lesson!, settings: settingsFor(), apiKey: null },
+      (e) => events.push(e)
+    )
+    expect(topicId).toBe('77-test-sessii')
+    expect(lesson.topic_id).toBe('77-test-sessii')
+    expect(session.isActive()).toBe(true)
+
+    await waitFor(() => !session.isActive())
+    expect(events.some((e) => e.runState === 'done')).toBe(true)
+    const onDisk = await fileService.readLessonJson(outputDir, topicId)
+    if (onDisk.blocks[0].type === 'vocabulary') {
+      expect(onDisk.blocks[0].words.every((w) => w.status === 'done')).toBe(true)
+    }
+  }, 30000)
+
+  it('startRegenerate() теперь тоже возвращает {topicId, lesson} (симметрично start()/startParsed())', async () => {
+    const session = new GenerationSession()
+    await session.start({ inputText: MINI_LESSON, settings: settingsFor() }, () => undefined)
+    await waitFor(() => !session.isActive())
+
+    const session2 = new GenerationSession()
+    const result = await session2.startRegenerate(
+      { topicId: '77-test-sessii', outputRoot: outputDir, mode: 'all', queueConfig: settingsFor().queue, pricePerThousandChars: {} },
+      () => undefined
+    )
+    expect(result.topicId).toBe('77-test-sessii')
+    expect(result.lesson.topic_id).toBe('77-test-sessii')
+    await waitFor(() => !session2.isActive())
   }, 30000)
 })

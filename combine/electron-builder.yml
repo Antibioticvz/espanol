@@ -1,0 +1,24 @@
+# electron-builder — сборка Combine 1.1 для личного использования (macOS, DMG, без подписи).
+appId: com.victor.combine
+productName: Combine
+directories:
+  output: release
+  buildResources: build
+# electron-vite кладёт main/preload/renderer в out/** (см. electron.vite.config.ts) — упаковываем
+# только это + package.json (main-поле), без src/тестов/конфигов сборки.
+files:
+  - out/**/*
+  - package.json
+mac:
+  target: dmg
+  icon: build/icon.icns
+  category: public.app-category.education
+  # Личное использование — без Apple Developer ID; unsigned build (identity: null отключает
+  # попытку найти сертификат для codesign, иначе electron-builder падает на машине без Keychain-сертификата).
+  identity: null
+# Публикации/auto-update нет (личное использование, --publish never в скрипте dist:mac) —
+# publish: null ЯВНО отключает и генерацию update-метаданных (latest-mac.yml), а не только загрузку.
+# Без этого electron-builder падает в конце сборки на createUpdateInfoTasks() ("Cannot read
+# properties of null (reading 'channel')") — сам .dmg к этому моменту уже собран и валиден, но
+# команда возвращает ненулевой код, что ломает `npm run dist:mac` как критерий готовности.
+publish: null

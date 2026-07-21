@@ -1,10 +1,12 @@
 /**
  * Typed IPC-контракт между renderer (UI) и main-процессом Combine.
  *
- * Это ПРЕДЛОЖЕНИЕ контракта со стороны renderer-агента: main-агент реализует свою сторону
- * независимо (см. combine/src/core/**), финальную стыковку каналов (имена событий ipcMain/ipcRenderer,
- * структура preload) выполнит оркестратор при merge веток feat/combine + feat/combine-ui.
- * Расхождения в деталях реализации допустимы — важна полнота набора операций.
+ * Это ПРЕДЛОЖЕНИЕ контракта со стороны renderer-агента, впоследствии СОСТЫКОВАННОЕ (v1.1,
+ * docs/DECISIONS.md D-22): src/preload/index.ts реализует именно этот интерфейс как
+ * `window.combineApi`, поверх main-хендлеров src/main/ipc-handlers.ts (частично существующих
+ * `combine:*` каналов, частично новых `combine:api:*`). Расхождения в деталях реализации
+ * (имена IPC-каналов, внутренняя структура main) не важны — важна полнота набора операций и то,
+ * что typecheck (`npm run typecheck`, оба tsconfig) проходит на обеих сторонах моста.
  *
  * Соглашение по мосту preload → renderer: main-процесс ожидается экспонирующим этот интерфейс как
  * `window.combineApi` через `contextBridge.exposeInMainWorld('combineApi', api)` (см. adapters/ipcAdapter.ts).
@@ -204,6 +206,24 @@ export interface GetPhraseAudioResult {
 }
 
 // ---------------------------------------------------------------------------
+// exportAnki — v1.1, ДОПОЛНЕНИЕ к контракту (см. docs/DECISIONS.md, задача «экспорт в Anki»).
+// Пункт меню карточки урока в Библиотеке «Экспорт в Anki» — упаковывает фразы+слова урока
+// (story пропускается) в .apkg (см. core/anki/anki-export.service.ts).
+// ---------------------------------------------------------------------------
+
+export interface ExportAnkiInput {
+  topicId: string
+}
+
+export interface ExportAnkiResult {
+  apkgPath: string
+  /** Число нот/карточек (фразы+слова, без story). */
+  noteCount: number
+  /** Число media-файлов в пакете (обычно noteCount × 2 — по ES+RU аудио на элемент). */
+  mediaCount: number
+}
+
+// ---------------------------------------------------------------------------
 // Полный контракт
 // ---------------------------------------------------------------------------
 
@@ -237,4 +257,7 @@ export interface CombineIpcApi {
 
   /** Ленивая загрузка байтов уже сгенерированной фразы для плеера библиотеки (см. комментарий выше). */
   getPhraseAudio(input: GetPhraseAudioInput): Promise<GetPhraseAudioResult>
+
+  /** v1.1: экспорт урока в Anki .apkg — см. комментарий у ExportAnkiInput выше. */
+  exportAnki(input: ExportAnkiInput): Promise<ExportAnkiResult>
 }
