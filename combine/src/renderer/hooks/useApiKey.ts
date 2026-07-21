@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 
 /**
- * Персистентность API-ключа (v1.2, D-23) — см. docstring у shared/ipc.ts#ApiKeyStatusResult.
+ * Персистентность API-ключа (v1.2) — см. docstring у shared/ipc.ts#ApiKeyStatusResult.
  * getApiKeyStatus() НИКОГДА не возвращает сам ключ, только статус — компонент, показывающий
  * "ключ сохранён", не должен и не может показать сам ключ.
  */
