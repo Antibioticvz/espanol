@@ -117,3 +117,11 @@ espanol/
 `LearningSession.lesson` объявлен опциональным, а `StatisticsService` не обращается к `session.lesson`
 (считает по `completedAt`/`actualDurationSeconds`), корректно работая с «осиротевшими» сессиями.
 Миграция не нужна — продовых данных ещё нет.
+
+## D-18. Lock-screen widget: только статистика (accessory), текущую фразу показывает Now Playing
+
+Полноценный lock-screen виджет с текущей фразой (SPEC §7.1) не делаем: фразу на экране блокировки
+уже показывает Now Playing (MPNowPlayingInfoCenter, D-… lock screen). Виджет реализован как единый
+`StatisticsWidget` со статистикой дня и семействами Home Screen (`systemSmall`/`systemMedium`) и
+lock-screen accessory (`accessoryCircular`/`accessoryRectangular`/`accessoryInline`). Так избегаем
+дублирования и сложной синхронизации live-состояния сессии в виджет.
