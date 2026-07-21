@@ -1,0 +1,59 @@
+#TOPIC 5 | Еда и рестораны
+
+##BLOCK verb_group | Глаголы для ресторана
+
+#WORD pedir | заказывать (просить)
+Quiero pedir el menú del día. | Я хочу заказать меню дня.
+¿Ya pediste tu plato? | Ты уже заказал своё блюдо?
+Voy a pedir una sopa de entrada. | Я закажу суп на первое.
+Le pedí la cuenta al mesero. | Я попросил счёт у официанта.
+
+#WORD probar | пробовать
+Quiero probar la comida típica de aquí. | Я хочу попробовать местную типичную еду.
+¿Puedo probar un poco de tu plato? | Могу я попробовать немного твоего блюда?
+Nunca he probado el ceviche. | Я никогда не пробовал севиче.
+Probé un postre delicioso ayer. | Я вчера попробовал вкусный десерт.
+
+#WORD recomendar | рекомендовать
+¿Qué me recomienda usted? | Что вы мне порекомендуете?
+Te recomiendo el plato de pescado. | Я рекомендую тебе рыбное блюдо.
+Mis amigos me recomendaron este restaurante. | Мои друзья порекомендовали мне этот ресторан.
+
+##BLOCK phrase_group | Ходовые фразы в ресторане
+
+#CATEGORY Заказ еды
+¿Nos puede traer el menú, por favor? | Принесите нам, пожалуйста, меню.
+Para mí, el pollo con arroz. | Мне — курицу с рисом.
+¿Qué ingredientes tiene este plato? | Какие ингредиенты в этом блюде?
+Soy alérgico a los mariscos. | У меня аллергия на морепродукты.
+
+#CATEGORY За столом
+¿Me puede traer más agua, por favor? | Принесите мне, пожалуйста, ещё воды.
+¡Qué rico está todo! | Как всё вкусно!
+¿Dónde está el baño, por favor? | Где туалет, пожалуйста?
+¿Me trae la carta de postres? | Принесите мне, пожалуйста, меню десертов.
+
+#CATEGORY Счёт и оплата
+La cuenta, por favor. | Счёт, пожалуйста.
+¿Puedo pagar por separado? | Могу я заплатить отдельно?
+¿Está incluida la propina? | Чаевые включены?
+Vamos a dividir la cuenta entre todos. | Мы разделим счёт на всех.
+
+##BLOCK vocabulary | Ключевая лексика
+el restaurante | ресторан
+el menú | меню
+la mesa | стол
+el mesero | официант
+la cuenta | счёт
+la propina | чаевые
+el plato | блюдо
+la bebida | напиток
+el postre | десерт
+la entrada | закуска
+el ingrediente | ингредиент
+la reserva | бронирование
+el sabor | вкус
+
+##BLOCK story | Короткий рассказ
+ES: Ayer fui a un restaurante nuevo cerca de mi casa para probar la comida local. El mesero me recomendó el plato de pescado y decidí pedirlo. También pedí una sopa de entrada porque tenía mucha hambre. Todo estaba muy rico, así que dejé una buena propina. Al final, pagué la cuenta y salí muy satisfecho.
+RU: Вчера я пошёл в новый ресторан недалеко от дома, чтобы попробовать местную еду. Официант порекомендовал мне рыбное блюдо, и я решил его заказать. Ещё я заказал суп на первое, потому что был очень голоден. Всё было очень вкусно, поэтому я оставил хорошие чаевые. В конце я оплатил счёт и ушёл очень довольным.
