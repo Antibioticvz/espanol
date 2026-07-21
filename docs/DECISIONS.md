@@ -125,3 +125,25 @@ espanol/
 `StatisticsWidget` со статистикой дня и семействами Home Screen (`systemSmall`/`systemMedium`) и
 lock-screen accessory (`accessoryCircular`/`accessoryRectangular`/`accessoryInline`). Так избегаем
 дублирования и сложной синхронизации live-состояния сессии в виджет.
+
+## D-19. Флеш-карты: дизайн режима (v1.1)
+
+Четвёртый режим сессии наряду с тремя аудио-режимами (`PlaybackMode.flashcards`), выбирается в
+`SessionConfigView`. Интерактивный, без фонового воспроизведения/lock screen.
+
+- **Карточка:** крупно текст вопроса + кнопка озвучки; автоозвучка — настройка сессии
+  (`flashcardAutoplay`, по умолчанию вкл). Направление — настройка `flashcardDirection`:
+  ES→RU (дефолт) или RU→ES.
+- **Показать ответ** → вторая сторона + её аудио (автоплей, если включён).
+- **«Знал»:** `reviewCount+1`, `PhraseStatistics.correctCount+1`, `lastReviewDate`, обычное
+  SRS-повышение (3/8). **«Не знал»:** `reviewCount+1` без `correctCount`, state не повышается,
+  карта возвращается в конец колоды текущей сессии (повтор до «Знал»). В счёт фраз сессии
+  (`phrasesCompletedCount`) повтор не задваивает — считаются уникальные закрытые карты.
+- Реализовано через `SpacedRepeatService.registerReview(_, wasCorrect:)`: при `false` растёт
+  только `reviewCount`/`totalReviewCount`, без `correctCount` и без повышения state. Аудио-режимы
+  вызывают с `wasCorrect: true` по умолчанию.
+- **Итоги:** `SessionCompletedView` + новая метрика «Точность: N% с первого раза»
+  (`SessionResult.accuracy`, считается в чистом `FlashcardSession`).
+- **Аудио:** существующий `SessionPlayerService.playClip(_:speed:volume:)` — по одной фразе,
+  без очереди повторов.
+- **Свайпы** как альтернатива кнопкам: влево — «не знал», вправо — «знал».
