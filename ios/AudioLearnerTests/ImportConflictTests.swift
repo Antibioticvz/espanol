@@ -77,4 +77,31 @@ final class ImportConflictTests: AudioLearnerTestCase {
         XCTAssertNil(result)
         XCTAssertEqual(try repository.allLessons().count, 1)
     }
+
+    /// «Обновить» сохраняет и статистику фразы (PhraseStatistics), а не только state.
+    func testUpdatePreservesPhraseStatistics() throws {
+        let lesson = try importFixture()
+        let targetId = try firstPhraseId(lesson)
+        let phrase = try XCTUnwrap(repository.phrase(phraseId: targetId))
+
+        let srs = SpacedRepeatService()
+        _ = srs.registerReview(phrase) // создаёт статистику, total=1
+        _ = srs.registerReview(phrase) // total=2
+        let stats = try XCTUnwrap(phrase.statistics)
+        stats.correctCount = 5
+        stats.averageReviewTime = 12.5
+        let reviewedAt = stats.lastReviewedAt
+        try context.save()
+
+        let service = FileImportService(repository: repository)
+        let prepared = try service.prepare(zipURL: try TestSupport.fixtureURL())
+        _ = try service.commit(prepared, resolution: .update)
+
+        let after = try XCTUnwrap(repository.phrase(phraseId: targetId))
+        let afterStats = try XCTUnwrap(after.statistics, "Статистика фразы должна сохраниться")
+        XCTAssertEqual(afterStats.totalReviewCount, 2)
+        XCTAssertEqual(afterStats.correctCount, 5)
+        XCTAssertEqual(afterStats.averageReviewTime, 12.5, accuracy: 0.001)
+        XCTAssertEqual(afterStats.lastReviewedAt, reviewedAt)
+    }
 }
