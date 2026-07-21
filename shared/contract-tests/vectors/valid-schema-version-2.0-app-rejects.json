@@ -1,0 +1,41 @@
+{
+  "schema_version": "2.0",
+  "topic_id": "10-schema-v2",
+  "topic_number": 10,
+  "title_ru": "schema_version мажорной версии 2.0",
+  "created_at": "2026-01-15T10:45:00.000Z",
+  "generator_version": "2.0.0",
+  "config": {
+    "provider": "mock_say",
+    "model": "macos_say",
+    "voice_es": { "id": "Monica", "name": "Mónica" },
+    "voice_ru": { "id": "Milena", "name": "Milena" }
+  },
+  "stats": {
+    "phrase_count": 0,
+    "vocab_count": 1,
+    "story_count": 0,
+    "total_elements": 1,
+    "characters_es": 7,
+    "characters_ru": 3,
+    "total_characters": 10
+  },
+  "blocks": [
+    {
+      "block_id": "b1",
+      "type": "vocabulary",
+      "title_ru": "Лексика",
+      "order_index": 0,
+      "words": [
+        {
+          "id": "10-b1-vocab-01",
+          "es": "el gato",
+          "ru": "кот",
+          "audio": { "es": "audio/es/10-b1-vocab-01.mp3", "ru": "audio/ru/10-b1-vocab-01.mp3" },
+          "duration_ms": { "es": 500, "ru": 400 },
+          "status": "pending"
+        }
+      ]
+    }
+  ]
+}

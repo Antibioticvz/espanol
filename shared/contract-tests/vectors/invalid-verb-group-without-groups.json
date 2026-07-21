@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "topic_id": "17-sin-groups",
+  "topic_number": 17,
+  "title_ru": "verb_group без обязательного groups",
+  "created_at": "2026-01-15T11:20:00.000Z",
+  "generator_version": "1.0.0",
+  "config": {
+    "provider": "mock_say",
+    "model": "macos_say",
+    "voice_es": { "id": "Monica", "name": "Mónica" },
+    "voice_ru": { "id": "Milena", "name": "Milena" }
+  },
+  "stats": {
+    "phrase_count": 0,
+    "vocab_count": 0,
+    "story_count": 0,
+    "total_elements": 0,
+    "characters_es": 0,
+    "characters_ru": 0,
+    "total_characters": 0
+  },
+  "blocks": [
+    {
+      "block_id": "b1",
+      "type": "verb_group",
+      "title_ru": "Глаголы",
+      "order_index": 0
+    }
+  ]
+}

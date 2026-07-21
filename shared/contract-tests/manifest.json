@@ -1,0 +1,103 @@
+[
+  {
+    "file": "vectors/valid-minimal.json",
+    "valid": true,
+    "note": "Минимальный урок: ровно 1 vocabulary-блок с 1 словом, только обязательные поля (без title_es/stability/similarity_boost/seed/опциональных stats)."
+  },
+  {
+    "file": "vectors/valid-story-only.json",
+    "valid": true,
+    "note": "Урок только с одним story-блоком (без groups/vocabulary) — story не требует наличия других типов блоков."
+  },
+  {
+    "file": "vectors/valid-config-zeros-and-nulls.json",
+    "valid": true,
+    "note": "config.stability=0, config.similarity_boost=0, config.seed=null — нули и null явно разрешены схемой (type: [\"number\"/\"integer\", \"null\"], minimum:0)."
+  },
+  {
+    "file": "vectors/valid-unicode-texts.json",
+    "valid": true,
+    "note": "Unicode в текстах: эмодзи, кириллица, CJK (日本語), испанские диакритики — es/ru/title_ru не ограничены по алфавиту, только minLength:1."
+  },
+  {
+    "file": "vectors/valid-duration-zero.json",
+    "valid": true,
+    "note": "duration_ms.es=0 и duration_ms.ru=0 у фразы pending (ещё не озвучена) — duration_pair допускает minimum:0, ноль не означает ошибку."
+  },
+  {
+    "file": "vectors/valid-long-strings.json",
+    "valid": true,
+    "note": "es/ru длиной 10000 символов, title_ru длиной 5000 символов — в схеме нет maxLength ни на одном текстовом поле урока."
+  },
+  {
+    "file": "vectors/valid-all-four-statuses.json",
+    "valid": true,
+    "note": "Все 4 статуса фразы (pending/generating/done/failed) в одной группе — штатное рабочее состояние Combine во время генерации/resume, а не финальный экспорт (по конвенции все done, но схема этого не требует)."
+  },
+  {
+    "file": "vectors/valid-null-title-es-and-optional-stats.json",
+    "valid": true,
+    "note": "title_es=null на корне и на блоке, generated_at=null, error=null у фразы, и все необязательные *_usd/*_seconds/*_mb поля stats=null — все они типизированы как [T, \"null\"]."
+  },
+  {
+    "file": "vectors/valid-all-block-types-mixed.json",
+    "valid": true,
+    "note": "По одному блоку каждого из 4 типов (verb_group, phrase_group, vocabulary, story) в одном уроке — интеграционная проверка, что allOf/if-then комбинация схемы не мешает смешанным урокам."
+  },
+  {
+    "file": "vectors/valid-schema-version-2.0-app-rejects.json",
+    "valid": true,
+    "appRejects": true,
+    "note": "schema_version=\"2.0\" — ВАЛИДНО по regex схемы (pattern \"^\\\\d+\\\\.\\\\d+$\" проверяет только форму major.minor, не конкретные значения). Но по описанию поля («iOS отклоняет несовместимые major-версии») это ДОЛЖНО быть отклонено на уровне бизнес-логики приложений — JSON Schema draft-07 не может закодировать «major <= 1» без const/enum со списком версий. appRejects:true — сигнал для conformance-раннеров: ajv-валидность true, но приложение обязано показать собственную ошибку несовместимости, а не тихо загрузить урок."
+  },
+  {
+    "file": "vectors/invalid-id-uppercase.json",
+    "valid": false,
+    "note": "id фразы с заглавными буквами (\"11-B1-VOCAB-01\") — паттерн id требует только [a-z0-9-] в буквенной части."
+  },
+  {
+    "file": "vectors/invalid-id-cyrillic.json",
+    "valid": false,
+    "note": "id фразы содержит кириллицу (\"12-b1-словарь-01\") — паттерн id — латиница/цифры/дефис."
+  },
+  {
+    "file": "vectors/invalid-id-no-trailing-number.json",
+    "valid": false,
+    "note": "id фразы без завершающего 2-значного номера (\"13-b1-vocab\" вместо \"...-01\") — нарушает хвост паттерна \"-[0-9]{2}$\". Тот же класс проблемы, что и переполнение >=100 элементов в группе (см. combine/src/core/parser/parser.torture.test.ts, найденный баг переполнения id)."
+  },
+  {
+    "file": "vectors/invalid-audio-path-outside-lang-dir.json",
+    "valid": false,
+    "note": "audio.es указывает на \"audio/fr/...\" вместо \"audio/es/...\" — audio_pair.es жёстко привязан к каталогу audio/es/, audio.ru — к audio/ru/."
+  },
+  {
+    "file": "vectors/invalid-missing-duration-ms.json",
+    "valid": false,
+    "note": "У фразы отсутствует обязательное поле duration_ms целиком."
+  },
+  {
+    "file": "vectors/invalid-extra-field-root.json",
+    "valid": false,
+    "note": "Лишнее поле internal_debug_note на корневом уровне урока — корень схемы имеет additionalProperties:false. См. отдельную находку в отчёте тест-инженера: на уровне отдельного БЛОКА (definitions.block) additionalProperties НЕ объявлен, поэтому аналогичное лишнее поле НА БЛОКЕ (а не на корне), наоборот, проходит валидацию — намеренно не оформлено отдельным вектором, т.к. по определению не даёт invalid-кейс."
+  },
+  {
+    "file": "vectors/invalid-verb-group-without-groups.json",
+    "valid": false,
+    "note": "Блок type=\"verb_group\" без обязательного (через allOf/if-then) поля groups."
+  },
+  {
+    "file": "vectors/invalid-story-without-text-ru.json",
+    "valid": false,
+    "note": "Блок type=\"story\" с text_es, но без обязательного text_ru."
+  },
+  {
+    "file": "vectors/invalid-empty-blocks.json",
+    "valid": false,
+    "note": "blocks: [] — нарушает minItems:1 на корневом свойстве blocks."
+  },
+  {
+    "file": "vectors/invalid-topic-id-pattern.json",
+    "valid": false,
+    "note": "topic_id=\"100-tema-grande\" при topic_number=100 — тот же класс переполнения 2-значного паджинга, что реально производит Combine-парсер при #TOPIC>=100 (см. combine/src/core/parser/parser.torture.test.ts, раздел «тема с номером 100»): topic_id и id всех фраз/слов начинают с 3 цифр вместо 2, что ломает \"^[0-9]{2}-...\"."
+  }
+]

@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "topic_id": "05-duracion-cero",
+  "topic_number": 5,
+  "title_ru": "duration_ms = 0 (ещё не озвучено)",
+  "created_at": "2026-01-15T10:20:00.000Z",
+  "generator_version": "1.0.0",
+  "config": {
+    "provider": "mock_say",
+    "model": "macos_say",
+    "voice_es": { "id": "Monica", "name": "Mónica" },
+    "voice_ru": { "id": "Milena", "name": "Milena" }
+  },
+  "stats": {
+    "phrase_count": 1,
+    "vocab_count": 0,
+    "story_count": 0,
+    "total_elements": 1,
+    "characters_es": 7,
+    "characters_ru": 6,
+    "total_characters": 13
+  },
+  "blocks": [
+    {
+      "block_id": "b1",
+      "type": "verb_group",
+      "title_ru": "Глаголы",
+      "order_index": 0,
+      "groups": [
+        {
+          "key": "tener",
+          "translation_ru": "иметь",
+          "order_index": 0,
+          "phrases": [
+            {
+              "id": "05-b1-tener-01",
+              "es": "Tengo.",
+              "ru": "Имею.",
+              "audio": { "es": "audio/es/05-b1-tener-01.mp3", "ru": "audio/ru/05-b1-tener-01.mp3" },
+              "duration_ms": { "es": 0, "ru": 0 },
+              "status": "pending"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
