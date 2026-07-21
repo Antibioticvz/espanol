@@ -45,7 +45,7 @@ enum LessonBlockType: String, Codable {
 
 // MARK: - Playback
 
-/// Режим сессии: три аудио-режима (спека §5) + флеш-карты (v1.1, D-19).
+/// Режим сессии: три аудио-режима (спека §5) + флеш-карты (v1.1, D-21).
 enum PlaybackMode: String, CaseIterable, Codable, Identifiable {
     case once         // Один раз
     case loopPhrase   // Цикл фраз
