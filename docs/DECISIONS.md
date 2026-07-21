@@ -147,3 +147,39 @@ lock-screen accessory (`accessoryCircular`/`accessoryRectangular`/`accessoryInli
 - **Аудио:** существующий `SessionPlayerService.playClip(_:speed:volume:)` — по одной фразе,
   без очереди повторов.
 - **Свайпы** как альтернатива кнопкам: влево — «не знал», вправо — «знал».
+
+## D-23. v1.2: методика прослушивания, сессия дня, системная интеграция
+
+**Пакет A — методика прослушивания.**
+- Пауза — режим `SessionConfig.pauseMode`: `fixed` (сек) или `proportional` (длина текущей стороны ×
+  коэффициент 1.0–2.5, дефолт 1.5). Дефолт новых сессий — `proportional`. Очередь и leg-машина плеера
+  строят паузу после каждой стороны из её `duration_ms`.
+- Порядок сторон `SessionConfig.sideOrder`: `esRu` (дефолт) / `ruEs` / `esEs` (shadowing: оригинал,
+  пауза, снова оригинал). Влияет на lock screen/Live Activity (title = первая сторона).
+- Автоскорость по статусу `autoSpeedByStatus` (toggle, дефолт выкл): learning ×0.75, inProgress ×0.9,
+  mastered ×1.0 — множитель поверх скорости сессии, per-phrase (`PlayablePhrase.speedMultiplier`).
+
+**Пакет B — сессия дня.**
+- `DailySession` собирает кросс-урочную сессию из `getRecommendedPhrases` по всем урокам, приоритет
+  срочным, затем более просроченным; лимит настраиваемый (дефолт 30), порядок `weakestFirst`/`shuffle`.
+- Кросс-урочная `LearningSession.lesson = nil` (D-17); статусы фраз обновляются в родных уроках;
+  `SessionCompletedView` показывает «Сессия дня». Кнопка на вкладке Сессия.
+- Sleep-таймер плеера: выкл/5/10/15/30/45 мин; по истечении доигрывает текущий повтор и мягко ставит
+  на паузу (не завершает сессию), хаптик; остаток показывается в плеере.
+
+**Пакет C — системная интеграция (iOS 17+).**
+- Интерактивный виджет: кнопка «▶ Сессия дня» (`Button(intent:)`) → `StartDailySessionIntent`
+  (`AudioPlaybackIntent`, старт воспроизведения без открытия приложения). Мост app↔intent —
+  `IntentActionCoordinator` в Shared (замыкания ставит приложение). Нет фраз к повтору → диалог
+  «Всё повторено».
+- Live Activity + Dynamic Island (`SessionActivityAttributes`, `NSSupportsLiveActivities`): текущая
+  фраза (по режиму текста lock screen), прогресс X/N, кнопка pause через `PauseSessionIntent`.
+  Обновление ТОЛЬКО на смене фразы (батарея); завершение сессии закрывает Activity; для флеш-карт не
+  создаётся.
+- Siri / App Shortcuts: `AudioLearnerShortcuts` — «Запусти испанский» / «Сессия дня» →
+  `StartDailySessionIntent`.
+- Версия приложения 1.2.0.
+
+Известные ограничения проверки: тап по кнопке виджета/старт из Siri/визуал Live Activity headless на
+CI не проверяются (нужны home screen/Siri/устройство); код следует документированным API, собирается и
+линкуется, логика интента покрыта санити-тестами.
