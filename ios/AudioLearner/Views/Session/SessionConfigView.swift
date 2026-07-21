@@ -47,9 +47,38 @@ struct SessionConfigView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
 
-                Section("Пауза между повторениями") {
-                    Stepper(value: $flow.config.pauseSeconds, in: 0...15, step: 1) {
-                        Text("Пауза: \(Int(flow.config.pauseSeconds)) сек")
+                Section("Порядок сторон") {
+                    Picker("Порядок", selection: $flow.config.sideOrder) {
+                        ForEach(SideOrder.allCases) { Text($0.titleRu).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                }
+
+                Section("Пауза между сторонами") {
+                    Picker("Тип паузы", selection: $flow.config.pauseMode) {
+                        ForEach(PauseMode.allCases) { Text($0.titleRu).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    if flow.config.pauseMode == .fixed {
+                        Stepper(value: $flow.config.pauseSeconds, in: 0...15, step: 1) {
+                            Text("Пауза: \(Int(flow.config.pauseSeconds)) сек")
+                        }
+                    } else {
+                        Picker("Коэффициент", selection: $flow.config.pauseCoefficient) {
+                            ForEach(SessionConfig.allowedPauseCoefficients, id: \.self) { c in
+                                Text("×\(coeffLabel(c))").tag(c)
+                            }
+                        }
+                        Text("Пауза = длина стороны × \(coeffLabel(flow.config.pauseCoefficient))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+
+                Section("Автоскорость") {
+                    Toggle("Замедлять слабые фразы", isOn: $flow.config.autoSpeedByStatus)
+                    if flow.config.autoSpeedByStatus {
+                        Text("Учу ×0.75 · В процессе ×0.9 · Выучено ×1.0")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
 
@@ -91,7 +120,13 @@ struct SessionConfigView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Назад") { env.sessionFlow.step = .selectPhrases }
+                Button("Назад") {
+                    if env.sessionFlow.isDailySession {
+                        env.sessionFlow.reset()
+                    } else {
+                        env.sessionFlow.step = .selectPhrases
+                    }
+                }
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button {
@@ -107,6 +142,10 @@ struct SessionConfigView: View {
 
     private func speedLabel(_ speed: Double) -> String {
         speed == 1.0 ? "1.0x" : (speed.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(speed)).0x" : "\(speed)x")
+    }
+
+    private func coeffLabel(_ c: Double) -> String {
+        c.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(c)).0" : String(format: "%g", c)
     }
 
     private var estimatedDuration: TimeInterval {

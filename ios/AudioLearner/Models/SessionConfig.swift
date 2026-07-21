@@ -9,8 +9,16 @@ struct SessionConfig: Codable, Equatable {
     var repetitions: Int
     /// Скорость воспроизведения (0.5–2.0), без изменения питча.
     var speed: Double
-    /// Пауза между элементами очереди, сек (0–15).
+    /// Пауза между элементами очереди, сек (0–15) — для фиксированного режима.
     var pauseSeconds: Double
+    /// Способ задания паузы: фиксированная или пропорциональная длине стороны (v1.2).
+    var pauseMode: PauseMode
+    /// Коэффициент пропорциональной паузы (1.0–2.5), пауза = длина стороны × коэффициент.
+    var pauseCoefficient: Double
+    /// Порядок сторон: ES→RU / RU→ES / ES→ES (v1.2).
+    var sideOrder: SideOrder
+    /// Автоскорость по статусу фразы (множитель поверх скорости сессии, v1.2).
+    var autoSpeedByStatus: Bool
     /// Режим воспроизведения.
     var playbackMode: PlaybackMode
     /// Число циклов для режима cycleSession.
@@ -29,11 +37,17 @@ struct SessionConfig: Codable, Equatable {
     /// Режим флеш-карт активен.
     var isFlashcards: Bool { playbackMode == .flashcards }
 
+    static let allowedPauseCoefficients: [Double] = [1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5]
+
     static let `default` = SessionConfig(
         phraseIds: [],
         repetitions: 5,
         speed: 1.0,
         pauseSeconds: 3,
+        pauseMode: .proportional,
+        pauseCoefficient: 1.5,
+        sideOrder: .esRu,
+        autoSpeedByStatus: false,
         playbackMode: .once,
         sessionCycles: 2,
         lockScreenTextMode: .both,
@@ -42,15 +56,29 @@ struct SessionConfig: Codable, Equatable {
         flashcardAutoplay: true
     )
 
+    /// Пауза после стороны заданной длины (сек) по текущему режиму.
+    func pauseAfterSide(durationSeconds: Double) -> TimeInterval {
+        switch pauseMode {
+        case .fixed: return pauseSeconds
+        case .proportional: return durationSeconds * pauseCoefficient
+        }
+    }
+
     /// Оценка длительности сессии по фактическим длительностям аудио (сек).
-    /// - Parameter phraseDurations: (es, ru) длительности в секундах для каждой выбранной фразы.
+    /// Учитывает порядок сторон и режим паузы (авто-скорость по статусу — приблизительно, без учёта).
     func estimatedDuration(phraseDurations: [(es: Double, ru: Double)]) -> TimeInterval {
-        let audioPerRepeat = phraseDurations.reduce(0.0) { $0 + ($1.es + $1.ru) / speed }
-        // Каждое повторение = ES, пауза, RU, пауза → 2 паузы на повтор на фразу.
-        let pausesPerRepeat = Double(phraseDurations.count) * pauseSeconds * 2
-        let perPass = audioPerRepeat + pausesPerRepeat
-        let passTotal = perPass * Double(repetitions)
+        let sides = sideOrder.sides
+        var total = 0.0
+        for d in phraseDurations {
+            var perRep = 0.0
+            for side in sides {
+                let sideDur = side == .es ? d.es : d.ru
+                perRep += sideDur / speed
+                perRep += pauseAfterSide(durationSeconds: sideDur)
+            }
+            total += perRep * Double(repetitions)
+        }
         let cycles = playbackMode == .cycleSession ? Double(max(1, sessionCycles)) : 1
-        return passTotal * cycles
+        return total * cycles
     }
 }

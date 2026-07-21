@@ -58,7 +58,8 @@ final class LockScreenService {
 
     // MARK: - Now Playing
 
-    /// Обновляет Now Playing с учётом режима показа текста (спека §6.1).
+    /// Обновляет Now Playing с учётом режима показа текста (спека §6.1) и порядка сторон
+    /// (v1.2: title = первая сторона).
     func update(
         textEs: String,
         textRu: String,
@@ -68,9 +69,10 @@ final class LockScreenService {
         rate: Double,
         trackNumber: Int,
         trackCount: Int,
-        textMode: LockScreenTextMode
+        textMode: LockScreenTextMode,
+        sideOrder: SideOrder = .esRu
     ) {
-        let (title, artist) = displayText(textEs: textEs, textRu: textRu, mode: textMode)
+        let (title, artist) = displayText(textEs: textEs, textRu: textRu, mode: textMode, sideOrder: sideOrder)
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: title,
             MPMediaItemPropertyArtist: artist,
@@ -85,9 +87,18 @@ final class LockScreenService {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
-    private func displayText(textEs: String, textRu: String, mode: LockScreenTextMode) -> (String, String) {
+    private func displayText(textEs: String, textRu: String, mode: LockScreenTextMode,
+                             sideOrder: SideOrder) -> (String, String) {
+        Self.displayText(textEs: textEs, textRu: textRu, mode: mode, sideOrder: sideOrder)
+    }
+
+    /// Композиция (title, subtitle) по режиму текста и порядку сторон (переиспользуется Live Activity).
+    static func displayText(textEs: String, textRu: String, mode: LockScreenTextMode,
+                            sideOrder: SideOrder) -> (String, String) {
+        let first = sideOrder.firstIsEs ? textEs : textRu
+        let second = sideOrder.firstIsEs ? textRu : textEs
         switch mode {
-        case .both: return (textEs, textRu)
+        case .both: return (first, second)
         case .original: return (textEs, "")
         case .translation: return (textRu, "")
         case .hidden: return ("Фраза", "")

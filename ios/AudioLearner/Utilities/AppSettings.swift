@@ -15,6 +15,8 @@ enum SettingsKeys {
     static let defaultSpeed = "defaultSpeed"
     static let defaultPauseSeconds = "defaultPauseSeconds"
     static let defaultTrackProgress = "defaultTrackProgress"
+    static let dailySessionLimit = "dailySessionLimit"
+    static let dailySessionOrder = "dailySessionOrder"
 }
 
 /// Наблюдаемое хранилище пользовательских предпочтений поверх UserDefaults.
@@ -34,6 +36,8 @@ final class AppSettings {
     var defaultSpeed: Double { didSet { defaults.set(defaultSpeed, forKey: SettingsKeys.defaultSpeed) } }
     var defaultPauseSeconds: Double { didSet { defaults.set(defaultPauseSeconds, forKey: SettingsKeys.defaultPauseSeconds) } }
     var defaultTrackProgress: Bool { didSet { defaults.set(defaultTrackProgress, forKey: SettingsKeys.defaultTrackProgress) } }
+    var dailySessionLimit: Int { didSet { defaults.set(dailySessionLimit, forKey: SettingsKeys.dailySessionLimit) } }
+    var dailySessionOrder: DailySessionOrder { didSet { defaults.set(dailySessionOrder.rawValue, forKey: SettingsKeys.dailySessionOrder) } }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -47,6 +51,8 @@ final class AppSettings {
         defaultSpeed = defaults.object(forKey: SettingsKeys.defaultSpeed) as? Double ?? 1.0
         defaultPauseSeconds = defaults.object(forKey: SettingsKeys.defaultPauseSeconds) as? Double ?? 3
         defaultTrackProgress = defaults.object(forKey: SettingsKeys.defaultTrackProgress) as? Bool ?? true
+        dailySessionLimit = defaults.object(forKey: SettingsKeys.dailySessionLimit) as? Int ?? DailySession.defaultLimit
+        dailySessionOrder = DailySessionOrder(rawValue: defaults.string(forKey: SettingsKeys.dailySessionOrder) ?? "") ?? .weakestFirst
     }
 
     /// Снимок настроек в виде словаря строк (для бэкапа).
@@ -69,6 +75,10 @@ final class AppSettings {
             repetitions: defaultRepetitions,
             speed: defaultSpeed,
             pauseSeconds: defaultPauseSeconds,
+            pauseMode: .proportional,
+            pauseCoefficient: 1.5,
+            sideOrder: .esRu,
+            autoSpeedByStatus: false,
             playbackMode: defaultPlaybackMode,
             sessionCycles: 2,
             lockScreenTextMode: lockScreenDisplay,

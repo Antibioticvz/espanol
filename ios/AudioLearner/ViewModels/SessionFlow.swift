@@ -38,12 +38,23 @@ final class SessionFlow {
     var config: SessionConfig = .default
     var result: SessionResult?
 
+    /// Кросс-урочная «Сессия дня» (D-23): lesson == nil, фразы заданы напрямую.
+    var isDailySession = false
+    @ObservationIgnored var dailyPhrases: [Phrase] = []
+
     /// Плеер живёт вместе с флоу, чтобы фон/lock screen переживали навигацию.
     @ObservationIgnored let player = SessionPlayerService()
+
+    /// Заголовок для экрана итогов/lock screen.
+    var sessionTitle: String {
+        isDailySession ? "Сессия дня" : (lesson?.titleRu ?? "")
+    }
 
     func begin(with lesson: Lesson, settings: AppSettings) {
         // Защита: любое старое воспроизведение останавливается перед новым выбором.
         player.reset()
+        self.isDailySession = false
+        self.dailyPhrases = []
         self.lesson = lesson
         self.lessonObjectID = lesson.topicId
         self.selectedPhraseIds = lesson.allLearnablePhrases.map(\.phraseId)
@@ -52,17 +63,33 @@ final class SessionFlow {
         self.step = .selectPhrases
     }
 
+    /// Запускает кросс-урочную «Сессию дня» из заранее собранных фраз.
+    func beginDaily(phrases: [Phrase], settings: AppSettings) {
+        player.reset()
+        self.isDailySession = true
+        self.dailyPhrases = phrases
+        self.lesson = nil
+        self.lessonObjectID = nil
+        self.selectedPhraseIds = phrases.map(\.phraseId)
+        self.config = settings.makeDefaultSessionConfig(phraseIds: selectedPhraseIds)
+        self.result = nil
+        self.step = .config // выбор фраз уже сделан автоматически
+    }
+
     func reset() {
         player.reset()
         step = .pickLesson
         lesson = nil
         lessonObjectID = nil
         selectedPhraseIds = []
+        isDailySession = false
+        dailyPhrases = []
         result = nil
     }
 
-    /// Фразы урока в порядке урока, отфильтрованные по выбранным id.
+    /// Фразы для воспроизведения в порядке выбора.
     func orderedSelectedPhrases() -> [Phrase] {
+        if isDailySession { return dailyPhrases }
         guard let lesson else { return [] }
         let selected = Set(selectedPhraseIds)
         return lesson.allLearnablePhrases.filter { selected.contains($0.phraseId) }

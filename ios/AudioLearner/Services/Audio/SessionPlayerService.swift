@@ -12,12 +12,16 @@ import Observation
 @Observable
 final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
-    enum Leg: Int { case esAudio, esPause, ruAudio, ruPause }
+    /// Слоты повторения: первая сторона + пауза, вторая сторона + пауза (порядок из sideOrder).
+    enum Leg: Int { case firstAudio, firstPause, secondAudio, secondPause }
 
     // MARK: - Inputs
     private(set) var phrases: [PlayablePhrase] = []
     private(set) var repetitions: Int = 5
     private(set) var pauseSeconds: Double = 3
+    private(set) var pauseMode: PauseMode = .fixed
+    private(set) var pauseCoefficient: Double = 1.5
+    private(set) var sideOrder: SideOrder = .esRu
     private(set) var playbackMode: PlaybackMode = .once
     private(set) var sessionCycles: Int = 2
 
@@ -27,15 +31,33 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
     private(set) var currentPhraseIndex = 0
     private(set) var currentRepetition = 1
     private(set) var currentCycle = 1
-    private(set) var currentLeg: Leg = .esAudio
+    private(set) var currentLeg: Leg = .firstAudio
     private(set) var currentLanguage: PhraseLanguage = .es
     private(set) var isInPause = false
     private(set) var currentTime: TimeInterval = 0
     private(set) var currentDuration: TimeInterval = 0
     private(set) var completedPhraseIds: Set<String> = []
 
+    // Sleep-таймер (v1.2): 0 = выкл. Остаток тикает каждую секунду для отображения.
+    private(set) var sleepTotalSeconds: Int = 0
+    private(set) var sleepRemainingSeconds: Int = 0
+    var sleepMinutes: Int { sleepTotalSeconds / 60 }
+    var isSleepActive: Bool { sleepTotalSeconds > 0 }
+
+    @ObservationIgnored var onSleepTimerFired: (@MainActor () -> Void)?
+    @ObservationIgnored private var sleepTimer: Timer?
+    @ObservationIgnored private var sleepDeadline: Date?
+    @ObservationIgnored private var sleepPending = false
+    var isStopPending: Bool { sleepPending }
+
+    /// Автоскорость текущей фразы (множитель по статусу); применяется поверх speed.
+    @ObservationIgnored private var currentSpeedMultiplier: Double = 1.0
+
+    /// Эффективная скорость с учётом множителя автоскорости.
+    private var effectiveRate: Float { Float(speed * currentSpeedMultiplier) }
+
     var speed: Double = 1.0 {
-        didSet { player?.rate = Float(speed) }
+        didSet { player?.rate = effectiveRate }
     }
 
     /// Громкость воспроизведения речи (0…1), применяется на лету.
@@ -95,6 +117,9 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         self.phrases = phrases
         self.repetitions = max(1, config.repetitions)
         self.pauseSeconds = max(0, config.pauseSeconds)
+        self.pauseMode = config.pauseMode
+        self.pauseCoefficient = config.pauseCoefficient
+        self.sideOrder = config.sideOrder
         self.playbackMode = config.playbackMode
         self.sessionCycles = max(1, config.sessionCycles)
         self.speed = config.speed
@@ -103,6 +128,12 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
     func reset() {
         stopTimers()
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        sleepDeadline = nil
+        sleepPending = false
+        sleepTotalSeconds = 0
+        sleepRemainingSeconds = 0
         player?.stop()
         player = nil
         stopSilence()
@@ -112,7 +143,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         currentPhraseIndex = 0
         currentRepetition = 1
         currentCycle = 1
-        currentLeg = .esAudio
+        currentLeg = .firstAudio
         currentLanguage = .es
         isInPause = false
         currentTime = 0
@@ -157,6 +188,53 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
     func stop() {
         reset()
+    }
+
+    // MARK: - Sleep timer (v1.2)
+
+    /// Устанавливает sleep-таймер (0 = выкл). По истечении доигрывает текущий повтор
+    /// и мягко ставит на паузу (не завершает сессию).
+    func setSleepTimer(minutes: Int) {
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        sleepPending = false
+        sleepTotalSeconds = max(0, minutes) * 60
+        sleepRemainingSeconds = sleepTotalSeconds
+        guard sleepTotalSeconds > 0 else { sleepDeadline = nil; return }
+        sleepDeadline = Date().addingTimeInterval(Double(sleepTotalSeconds))
+        sleepTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tickSleep() }
+        }
+    }
+
+    private func tickSleep() {
+        guard let deadline = sleepDeadline else { return }
+        let remaining = Int(ceil(deadline.timeIntervalSinceNow))
+        sleepRemainingSeconds = max(0, remaining)
+        if remaining <= 0 {
+            sleepTimer?.invalidate()
+            sleepTimer = nil
+            sleepDeadline = nil
+            sleepPending = true // остановимся по завершении текущего повтора
+        }
+    }
+
+    /// Помечает остановку по завершении текущего повтора (для тестов/внутреннего использования).
+    func requestStopAtRepetitionEnd() { sleepPending = true }
+
+    /// Если запрошена остановка по sleep-таймеру — мягко ставим на паузу (не finish).
+    @discardableResult
+    func consumeSleepStopIfNeeded() -> Bool {
+        guard sleepPending else { return false }
+        sleepPending = false
+        sleepTotalSeconds = 0
+        sleepRemainingSeconds = 0
+        sleepDeadline = nil
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        pause()
+        onSleepTimerFired?()
+        return true
     }
 
     // MARK: - Single clip (флеш-карты)
@@ -207,7 +285,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
     private func restartPhraseLegs() {
         currentRepetition = 1
-        currentLeg = .esAudio
+        currentLeg = .firstAudio
         loadCurrentLeg(autoplay: isPlaying)
     }
 
@@ -216,18 +294,30 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
     private func loadCurrentLeg(autoplay: Bool) {
         stopPauseTimer()
         guard let phrase = currentPhrase else { finishSession(); return }
+        currentSpeedMultiplier = phrase.speedMultiplier
+        let sides = sideOrder.sides
 
         switch currentLeg {
-        case .esAudio:
-            currentLanguage = .es
-            playAudio(url: phrase.audioEsURL, autoplay: autoplay)
-        case .ruAudio:
-            currentLanguage = .ru
-            playAudio(url: phrase.audioRuURL, autoplay: autoplay)
-        case .esPause, .ruPause:
-            beginPause(autoplay: autoplay)
+        case .firstAudio:
+            currentLanguage = sides[0]
+            playAudio(url: phrase.url(sides[0]), autoplay: autoplay)
+        case .secondAudio:
+            currentLanguage = sides[1]
+            playAudio(url: phrase.url(sides[1]), autoplay: autoplay)
+        case .firstPause:
+            beginPause(seconds: pauseDuration(for: sides[0], phrase: phrase), autoplay: autoplay)
+        case .secondPause:
+            beginPause(seconds: pauseDuration(for: sides[1], phrase: phrase), autoplay: autoplay)
         }
         onItemChanged?()
+    }
+
+    /// Длительность паузы после стороны: фиксированная или пропорциональная длине стороны.
+    private func pauseDuration(for side: PhraseLanguage, phrase: PlayablePhrase) -> TimeInterval {
+        switch pauseMode {
+        case .fixed: return pauseSeconds
+        case .proportional: return phrase.durationSeconds(side) * pauseCoefficient
+        }
     }
 
     private func playAudio(url: URL, autoplay: Bool) {
@@ -237,7 +327,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         do {
             let newPlayer = try AVAudioPlayer(contentsOf: url)
             newPlayer.enableRate = true
-            newPlayer.rate = Float(speed)
+            newPlayer.rate = effectiveRate
             newPlayer.volume = Float(volume)
             newPlayer.delegate = self
             newPlayer.prepareToPlay()
@@ -256,13 +346,13 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         }
     }
 
-    private func beginPause(autoplay: Bool) {
+    private func beginPause(seconds: TimeInterval, autoplay: Bool) {
         player = nil
         isInPause = true
-        currentDuration = pauseSeconds
+        currentDuration = seconds
         currentTime = 0
-        pauseRemaining = pauseSeconds
-        if pauseSeconds <= 0 {
+        pauseRemaining = seconds
+        if seconds <= 0 {
             isInPause = false
             advanceLeg()
             return
@@ -322,9 +412,11 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
     }
 
     private func finishRepetition() {
+        // Sleep-таймер: доиграли повтор — мягко останавливаемся.
+        if consumeSleepStopIfNeeded() { return }
         if currentRepetition < repetitions {
             currentRepetition += 1
-            currentLeg = .esAudio
+            currentLeg = .firstAudio
             loadCurrentLeg(autoplay: isPlaying)
         } else {
             // Все повторения фразы выполнены.
@@ -333,7 +425,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
             case .loopPhrase:
                 // Зацикливаем текущую фразу до нажатия «Далее».
                 currentRepetition = 1
-                currentLeg = .esAudio
+                currentLeg = .firstAudio
                 loadCurrentLeg(autoplay: isPlaying)
             case .once, .cycleSession, .flashcards:
                 advancePhraseBoundary()
@@ -345,7 +437,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         if currentPhraseIndex + 1 < phrases.count {
             currentPhraseIndex += 1
             currentRepetition = 1
-            currentLeg = .esAudio
+            currentLeg = .firstAudio
             loadCurrentLeg(autoplay: isPlaying)
         } else {
             // Конец прохода.
@@ -353,7 +445,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
                 currentCycle += 1
                 currentPhraseIndex = 0
                 currentRepetition = 1
-                currentLeg = .esAudio
+                currentLeg = .firstAudio
                 completedPhraseIds = [] // новый проход
                 loadCurrentLeg(autoplay: isPlaying)
             } else {
@@ -409,8 +501,9 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
     private func tickProgress() {
         if isInPause {
-            let elapsed = (pauseSeconds - pauseRemaining) + (pauseStartedAt.map { Date().timeIntervalSince($0) } ?? 0)
-            currentTime = min(pauseSeconds, elapsed)
+            // currentDuration хранит фактическую длину текущей паузы (фикс. или пропорц.).
+            let elapsed = (currentDuration - pauseRemaining) + (pauseStartedAt.map { Date().timeIntervalSince($0) } ?? 0)
+            currentTime = min(currentDuration, elapsed)
         } else if let player {
             currentTime = player.currentTime
         }

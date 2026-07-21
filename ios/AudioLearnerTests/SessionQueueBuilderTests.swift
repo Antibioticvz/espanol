@@ -100,6 +100,7 @@ final class SessionQueueBuilderTests: XCTestCase {
     func testEstimatedDuration() {
         var config = SessionConfig.default
         config.repetitions = 2
+        config.pauseMode = .fixed
         config.pauseSeconds = 5
         config.speed = 1.0
         config.playbackMode = .once
@@ -107,5 +108,18 @@ final class SessionQueueBuilderTests: XCTestCase {
         let duration = config.estimatedDuration(phraseDurations: [(es: 1.0, ru: 1.0)])
         // На повтор: аудио 2с + 2 паузы по 5с = 12с; × 2 повтора = 24с.
         XCTAssertEqual(duration, 24, accuracy: 0.001)
+    }
+
+    func testEstimatedDurationProportional() {
+        var config = SessionConfig.default
+        config.repetitions = 1
+        config.pauseMode = .proportional
+        config.pauseCoefficient = 1.5
+        config.speed = 1.0
+        config.playbackMode = .once
+        config.sideOrder = .esRu
+        // es=2s, ru=1s. Пауза после es=3s, после ru=1.5s. Аудио 3s + паузы 4.5s = 7.5s.
+        let duration = config.estimatedDuration(phraseDurations: [(es: 2.0, ru: 1.0)])
+        XCTAssertEqual(duration, 7.5, accuracy: 0.001)
     }
 }

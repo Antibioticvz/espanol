@@ -18,6 +18,8 @@ final class PlayerViewModel {
     @ObservationIgnored private var startedAt = Date()
     @ObservationIgnored private var transitions: [SpacedRepeatService.StateTransition] = []
     @ObservationIgnored private var didFinish = false
+    @ObservationIgnored private let liveActivity = LiveActivityService()
+    @ObservationIgnored private var lastActivityIndex = -1
 
     init(env: AppEnvironment, flow: SessionFlow) {
         self.env = env
@@ -27,19 +29,21 @@ final class PlayerViewModel {
     // MARK: - Start
 
     func startSession() {
-        guard let lesson = flow.lesson else { return }
         let phrases = flow.orderedSelectedPhrases()
-        let playables = phrases.compactMap { PlayablePhrase(phrase: $0) }
+        guard !phrases.isEmpty else { return }
+        let playables = phrases.compactMap {
+            PlayablePhrase(phrase: $0, autoSpeedByStatus: flow.config.autoSpeedByStatus)
+        }
 
         startedAt = Date()
         transitions = []
         didFinish = false
 
-        // Создаём запись сессии.
+        // Создаём запись сессии (lesson == nil для «Сессии дня», D-17 это позволяет).
         let session = LearningSession(context: env.viewContext)
         session.sessionId = UUID()
         session.startedAt = startedAt
-        session.lesson = lesson
+        session.lesson = flow.lesson
         session.speed = flow.config.speed
         session.phrasesCount = Int64(playables.count)
         session.phrasesRepeats = Int64(playables.count * flow.config.repetitions)
@@ -74,11 +78,19 @@ final class PlayerViewModel {
         player.onPhraseCompleted = { [weak self] phraseId in self?.handlePhraseCompleted(phraseId) }
         player.onSessionFinished = { [weak self] in self?.finish() }
         player.onItemChanged = { [weak self] in self?.updateNowPlaying() }
+        player.onSleepTimerFired = { [weak self] in
+            Haptics.success(enabled: self?.env.settings.vibrationEnabled ?? true)
+            self?.updateNowPlaying()
+        }
 
         player.configure(phrases: playables, config: flow.config)
         player.volume = env.settings.defaultVolume
         player.start()
         updateNowPlaying()
+
+        // Live Activity (только аудио-сессии, не флеш-карты).
+        lastActivityIndex = player.currentPhraseIndex
+        liveActivity.start(lessonTitle: flow.sessionTitle, state: activityState())
     }
 
     // MARK: - Controls
@@ -87,6 +99,7 @@ final class PlayerViewModel {
         player.togglePlayPause()
         Haptics.impact(.light, enabled: env.settings.vibrationEnabled)
         updateNowPlaying()
+        liveActivity.update(activityState()) // отразить play/pause немедленно
     }
 
     func next() {
@@ -107,6 +120,10 @@ final class PlayerViewModel {
     func setSpeed(_ speed: Double) {
         player.speed = speed
         updateNowPlaying()
+    }
+
+    func setSleepTimer(minutes: Int) {
+        player.setSleepTimer(minutes: minutes)
     }
 
     func toggleFavorite() {
@@ -146,7 +163,7 @@ final class PlayerViewModel {
         let completedAt = Date()
         let duration = Int(completedAt.timeIntervalSince(startedAt))
 
-        if let session = learningSession, let lesson = flow.lesson {
+        if let session = learningSession {
             session.completedAt = completedAt
             session.actualDurationSeconds = Int64(duration)
             session.phrasesCompletedCount = Int64(player.completedPhraseIds.count)
@@ -160,25 +177,31 @@ final class PlayerViewModel {
                 update.updatedAt = completedAt
                 update.session = session
             }
+            try? env.viewContext.save()
 
-            SessionCompletion.applyLessonProgress(
-                env: env, lesson: lesson,
-                durationSeconds: duration,
-                phrasesReviewed: player.completedPhraseIds.count,
-                completedAt: completedAt
-            )
+            // Прогресс урока — только для сессии одного урока (для «Сессии дня» lesson == nil,
+            // статусы фраз уже обновлены SRS в их родных уроках).
+            if let lesson = flow.lesson {
+                SessionCompletion.applyLessonProgress(
+                    env: env, lesson: lesson,
+                    durationSeconds: duration,
+                    phrasesReviewed: player.completedPhraseIds.count,
+                    completedAt: completedAt
+                )
+            }
         }
 
         let newAchievements = SessionCompletion.evaluateAchievements(env: env, now: completedAt)
         let recommendations = SessionCompletion.buildRecommendations(env: env)
 
         env.lockScreen.clear()
+        liveActivity.end()
         env.activeSessionID = nil
         env.refreshWidgetStats(now: completedAt)
         Haptics.success(enabled: env.settings.sessionCompleteVibration)
 
         flow.result = SessionResult(
-            lessonTitle: flow.lesson?.titleRu ?? "",
+            lessonTitle: flow.sessionTitle,
             completedAt: completedAt,
             durationSeconds: duration,
             phrasesCompleted: player.completedPhraseIds.count,
@@ -210,6 +233,7 @@ final class PlayerViewModel {
             try? env.viewContext.save()
         }
         env.lockScreen.clear()
+        liveActivity.end()
         env.activeSessionID = nil
         player.reset()
         flow.reset()
@@ -218,8 +242,30 @@ final class PlayerViewModel {
 
     // MARK: - Now Playing
 
+    /// Собирает состояние Live Activity из текущей фразы (title/subtitle по режиму lock screen).
+    private func activityState() -> SessionActivityAttributes.ContentState {
+        let phrase = player.currentPhrase
+        let (title, subtitle) = LockScreenService.displayText(
+            textEs: phrase?.textEs ?? "",
+            textRu: phrase?.textRu ?? "",
+            mode: flow.config.lockScreenTextMode,
+            sideOrder: flow.config.sideOrder
+        )
+        return .init(
+            title: title, subtitle: subtitle,
+            index: player.currentPhraseIndex + 1,
+            total: player.totalPhrases,
+            isPlaying: player.isPlaying
+        )
+    }
+
     func updateNowPlaying() {
         syncFavorite()
+        // Live Activity — только на смене фразы (не по секундному прогрессу).
+        if player.currentPhraseIndex != lastActivityIndex {
+            lastActivityIndex = player.currentPhraseIndex
+            liveActivity.update(activityState())
+        }
         guard let phrase = player.currentPhrase else { return }
         env.lockScreen.update(
             textEs: phrase.textEs,
@@ -230,7 +276,8 @@ final class PlayerViewModel {
             rate: player.isPlaying ? player.speed : 0,
             trackNumber: player.currentPhraseIndex + 1,
             trackCount: player.totalPhrases,
-            textMode: flow.config.lockScreenTextMode
+            textMode: flow.config.lockScreenTextMode,
+            sideOrder: flow.config.sideOrder
         )
     }
 }

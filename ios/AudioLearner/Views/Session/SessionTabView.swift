@@ -39,6 +39,8 @@ struct SessionLessonPickerView: View {
         sortDescriptors: [NSSortDescriptor(key: "topicNumber", ascending: true)]
     ) private var lessons: FetchedResults<Lesson>
 
+    @State private var showNothingToReview = false
+
     var body: some View {
         Group {
             if lessons.isEmpty {
@@ -48,24 +50,53 @@ struct SessionLessonPickerView: View {
                     message: "Импортируйте урок на вкладке «Уроки», чтобы начать сессию."
                 )
             } else {
-                List(lessons, id: \.objectID) { lesson in
-                    Button {
-                        env.startSession(for: lesson)
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(lesson.titleRu).font(.headline)
-                                Text(Format.phraseCount(lesson.allLearnablePhrases.count))
-                                    .font(.caption).foregroundStyle(.secondary)
+                List {
+                    Section {
+                        Button {
+                            if !env.startDailySession() { showNothingToReview = true }
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "sparkles")
+                                    .font(.title2)
+                                    .foregroundStyle(.tint)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Сессия дня").font(.headline)
+                                    Text("Автоподбор фраз к повтору по всем урокам")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "play.circle.fill").font(.title2).foregroundStyle(.tint)
                             }
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Section("Уроки") {
+                        ForEach(lessons, id: \.objectID) { lesson in
+                            Button {
+                                env.startSession(for: lesson)
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(lesson.titleRu).font(.headline)
+                                        Text(Format.phraseCount(lesson.allLearnablePhrases.count))
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
         .navigationTitle("Сессия")
+        .alert("Всё повторено", isPresented: $showNothingToReview) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Сейчас нет фраз к повтору. Возвращайтесь позже.")
+        }
     }
 }
