@@ -29,7 +29,9 @@ final class PlayerViewModel {
     func startSession() {
         guard let lesson = flow.lesson else { return }
         let phrases = flow.orderedSelectedPhrases()
-        let playables = phrases.compactMap { PlayablePhrase(phrase: $0) }
+        let playables = phrases.compactMap {
+            PlayablePhrase(phrase: $0, autoSpeedByStatus: flow.config.autoSpeedByStatus)
+        }
 
         startedAt = Date()
         transitions = []
@@ -230,7 +232,8 @@ final class PlayerViewModel {
             rate: player.isPlaying ? player.speed : 0,
             trackNumber: player.currentPhraseIndex + 1,
             trackCount: player.totalPhrases,
-            textMode: flow.config.lockScreenTextMode
+            textMode: flow.config.lockScreenTextMode,
+            sideOrder: flow.config.sideOrder
         )
     }
 }

@@ -82,6 +82,61 @@ enum FlashcardDirection: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+/// Способ задания паузы между сторонами (v1.2, D-23).
+enum PauseMode: String, CaseIterable, Codable, Identifiable {
+    case fixed        // фиксированная длительность (сек)
+    case proportional // длительность стороны × коэффициент
+
+    var id: String { rawValue }
+
+    var titleRu: String {
+        switch self {
+        case .fixed: return "Фиксированная"
+        case .proportional: return "Пропорциональная"
+        }
+    }
+}
+
+/// Порядок сторон в аудио-сессии (v1.2, D-23).
+enum SideOrder: String, CaseIterable, Codable, Identifiable {
+    case esRu // ES → RU (дефолт)
+    case ruEs // RU → ES (сначала перевод)
+    case esEs // ES → ES (shadowing, без перевода)
+
+    var id: String { rawValue }
+
+    var titleRu: String {
+        switch self {
+        case .esRu: return "Испанский → русский"
+        case .ruEs: return "Русский → испанский"
+        case .esEs: return "Испанский → испанский (shadowing)"
+        }
+    }
+
+    /// Две проигрываемые стороны в порядке следования.
+    var sides: [PhraseLanguage] {
+        switch self {
+        case .esRu: return [.es, .ru]
+        case .ruEs: return [.ru, .es]
+        case .esEs: return [.es, .es]
+        }
+    }
+
+    /// Является ли первая (заглавная для lock screen) сторона испанской.
+    var firstIsEs: Bool { sides.first == .es }
+}
+
+extension PhraseState {
+    /// Множитель автоскорости по статусу (v1.2, D-23): чем слабее — тем медленнее.
+    var autoSpeedMultiplier: Double {
+        switch self {
+        case .learning: return 0.75
+        case .inProgress: return 0.9
+        case .mastered: return 1.0
+        }
+    }
+}
+
 /// Режим показа текста на lock screen (спека §6.1).
 enum LockScreenTextMode: String, CaseIterable, Codable, Identifiable {
     case both        // Оригинал + перевод
