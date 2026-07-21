@@ -68,6 +68,38 @@ final class SpacedRepeatServiceTests: AudioLearnerTestCase {
         XCTAssertNotNil(stats.lastReviewedAt)
     }
 
+    // MARK: - wasCorrect (флеш-карты «Знал»/«Не знал»)
+
+    func testWasCorrectTrueIncrementsCorrectCountAndPromotes() throws {
+        let phrase = makePhrase(state: .learning, reviewCount: 2)
+        let transition = srs.registerReview(phrase, wasCorrect: true)
+        XCTAssertEqual(phrase.reviewCount, 3)
+        XCTAssertEqual(phrase.stateEnum, .inProgress, "верный ответ повышает state")
+        let stats = try XCTUnwrap(phrase.statistics)
+        XCTAssertEqual(stats.correctCount, 1)
+        XCTAssertEqual(stats.totalReviewCount, 1)
+        XCTAssertNotNil(transition)
+    }
+
+    func testWasCorrectFalseNoCorrectCountNoPromotion() throws {
+        let phrase = makePhrase(state: .learning, reviewCount: 2)
+        let transition = srs.registerReview(phrase, wasCorrect: false)
+        XCTAssertEqual(phrase.reviewCount, 3, "reviewCount растёт и при «Не знал»")
+        XCTAssertEqual(phrase.stateEnum, .learning, "неверный ответ НЕ повышает state")
+        let stats = try XCTUnwrap(phrase.statistics)
+        XCTAssertEqual(stats.correctCount, 0, "correctCount не растёт при «Не знал»")
+        XCTAssertEqual(stats.totalReviewCount, 1)
+        XCTAssertNil(transition)
+    }
+
+    func testDefaultReviewCountsAsCorrect() throws {
+        // Аудио-режимы вызывают без wasCorrect — по умолчанию корректный повтор.
+        let phrase = makePhrase(state: .inProgress, reviewCount: 7)
+        _ = srs.registerReview(phrase)
+        XCTAssertEqual(phrase.statistics?.correctCount, 1)
+        XCTAssertEqual(phrase.stateEnum, .mastered)
+    }
+
     // MARK: - Recommendations by date
 
     func testRecommendationsByLastReviewDate() throws {
