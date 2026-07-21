@@ -1,0 +1,164 @@
+#TOPIC 4 | Рассказ о себе
+
+##BLOCK verb_group | Кто я — происхождение и факты
+
+#WORD llamarse | зваться
+Me llamo Victor. | Меня зовут Виктор.
+¿Cómo te llamas tú? | Как тебя зовут?
+Todos me llaman Vic, para abreviar. | Все зовут меня Вик, для краткости.
+
+#WORD tener | иметь (возраст)
+Tengo cuarenta años. | Мне сорок лет.
+¿Cuántos años tienes tú? | Сколько лет тебе?
+Dicen que no aparento cuarenta años. | Говорят, что на сорок я не выгляжу.
+
+#WORD ser | быть (национальность)
+Soy ruso. | Я русский.
+Mi familia es completamente rusa. | Моя семья полностью русская.
+¿De qué nacionalidad eres tú? | Какой ты национальности?
+
+#WORD nacer | родиться
+Nací en Rusia. | Я родился в России.
+Nací en una ciudad pequeña. | Я родился в маленьком городе.
+¿Dónde naciste tú? | Где ты родился/родилась?
+
+#WORD vivir | жить
+Vivo en Georgia actualmente. | Сейчас я живу в Грузии.
+Llevo un tiempo viviendo fuera de Rusia. | Я уже какое-то время живу вне России.
+¿Vives cerca de aquí? | Ты живёшь недалеко отсюда?
+
+#WORD mudarse | переезжать
+Me mudé de Rusia hace algunos años. | Я переехал из России несколько лет назад.
+Nos mudamos varias veces por mi trabajo. | Мы несколько раз переезжали из-за моей работы.
+¿Te gustaría mudarte a otro país algún día? | Тебе бы хотелось когда-нибудь переехать в другую страну?
+
+#WORD hablar | говорить (языки)
+Hablo ruso e inglés, y un poco de español. | Я говорю по-русски и по-английски, и немного по-испански.
+Todavía hablo español con acento. | Я всё ещё говорю по-испански с акцентом.
+¿Hablas algún otro idioma además del español? | Ты говоришь на каком-нибудь ещё языке, кроме испанского?
+
+##BLOCK verb_group | Профессия
+
+#WORD trabajar | работать
+Trabajo como programador. | Я работаю программистом.
+Trabajo a distancia desde hace varios años. | Я работаю удалённо уже несколько лет.
+¿En qué trabajas tú? | А ты кем работаешь?
+
+#WORD ser | быть (профессия)
+Soy programador de profesión. | Я программист по профессии.
+Soy desarrollador de software desde hace más de diez años. | Я разработчик программного обеспечения уже больше десяти лет.
+¿Eres programadora también, o te dedicas a otra cosa? | Ты тоже программист, или занимаешься чем-то другим?
+
+#WORD dedicarse a | заниматься чем-то
+Me dedico al desarrollo de aplicaciones web. | Я занимаюсь разработкой веб-приложений.
+Me dedico a esto desde muy joven. | Я занимаюсь этим с самой юности.
+¿A qué te dedicas tú exactamente? | А ты чем конкретно занимаешься?
+
+#WORD programar | программировать
+Programo todos los días desde casa. | Я программирую каждый день из дома.
+Llevo más de diez años programando profesionalmente. | Я уже больше десяти лет профессионально программирую.
+¿Sabes programar, o te interesa aprender? | Ты умеешь программировать, или тебе интересно научиться?
+
+#WORD especializarse | специализироваться
+Me especializo en aplicaciones web modernas. | Я специализируюсь на современных веб-приложениях.
+Me especialicé en esto poco a poco, con la experiencia. | Я постепенно специализировался на этом, с опытом.
+¿En qué te especializas tú? | А ты на чём специализируешься?
+
+#WORD colaborar | сотрудничать
+Colaboro con una empresa extranjera. | Я сотрудничаю с иностранной компанией.
+Colaboro con clientes de varios países. | Я сотрудничаю с клиентами из разных стран.
+¿Colaboras con equipos internacionales también? | Ты тоже сотрудничаешь с международными командами?
+
+#WORD ganarse la vida | зарабатывать на жизнь
+Me gano la vida programando. | Я зарабатываю на жизнь программированием.
+Muchos programadores se ganan bien la vida trabajando a distancia. | Многие программисты неплохо зарабатывают, работая удалённо.
+¿Cómo te ganas la vida tú? | А чем ты зарабатываешь на жизнь?
+
+##BLOCK verb_group | Семья — мой сын
+
+#WORD tener | иметь (сына)
+Tengo un hijo pequeño. | У меня есть маленький сын.
+Tengo un solo hijo, por ahora. | У меня пока только один сын.
+¿Tienes hijos tú también? | А у тебя тоже есть дети?
+
+#WORD criar | растить / воспитывать
+Estoy criando a mi hijo lejos de Rusia. | Я воспитываю сына вдали от России.
+Criar a un hijo cambia completamente tu vida. | Воспитание ребёнка полностью меняет твою жизнь.
+¿Es difícil criar a un hijo tan lejos de la familia? | Трудно ли растить ребёнка так далеко от семьи?
+
+#WORD enseñar | учить
+Le enseño ruso a mi hijo en casa. | Я учу сына русскому языку дома.
+Quiero enseñarle también un poco de español. | Хочу научить его и немного испанскому.
+¿Qué le enseñas tú a tus hijos? | А ты чему учишь своих детей?
+
+#WORD jugar | играть
+Juego con mi hijo todas las tardes. | Я играю с сыном каждый вечер.
+Nos gusta jugar juntos antes de cenar. | Нам нравится играть вместе перед ужином.
+¿Juegas mucho con tus hijos? | Ты много играешь со своими детьми?
+
+#WORD pasar | проводить (время)
+Trabajar a distancia me permite pasar más tiempo con mi hijo. | Удалённая работа позволяет мне проводить больше времени с сыном.
+Paso las mañanas trabajando y las tardes con mi familia. | Я провожу утро за работой, а вечера — с семьёй.
+¿Cuánto tiempo pasas tú con tu familia entre semana? | Сколько времени ты проводишь со своей семьёй в будни?
+
+#WORD crecer | расти
+Mi hijo está creciendo muy rápido. | Мой сын очень быстро растёт.
+Quiero que crezca hablando más de un idioma. | Хочу, чтобы он рос, говоря больше чем на одном языке.
+¿Dónde te gustaría que creciera tu hijo? | Где бы тебе хотелось, чтобы рос твой ребёнок?
+
+#WORD querer | любить
+Quiero mucho a mi hijo, es lo más importante para mí. | Я очень люблю своего сына, он самое важное для меня.
+Quiero darle una buena vida a mi familia. | Я хочу дать своей семье хорошую жизнь.
+¿Qué es lo que más quieres para tu hijo? | Что ты больше всего хочешь для своего ребёнка?
+
+##BLOCK phrase_group | Ходовые фразы — знакомство и разговор о себе
+
+#CATEGORY Первое знакомство
+Mucho gusto, soy Victor. | Очень приятно, я Виктор.
+Encantado de conocerte. | Приятно познакомиться.
+¿Y tú, cómo te llamas? | А тебя как зовут?
+
+#CATEGORY Про язык
+No hablo muy bien español todavía. | Я пока не очень хорошо говорю по-испански.
+Estoy aprendiendo español, así que ten paciencia. | Я учу испанский, так что потерпи немного.
+¿Puedes hablar un poco más despacio, por favor? | Можешь говорить чуть медленнее, пожалуйста?
+
+#CATEGORY Возврат вопроса
+¿Y tú, a qué te dedicas? | А ты чем занимаешься?
+¿Y tú, de dónde eres? | А ты откуда?
+¿Y tú, tienes hijos? | А у тебя есть дети?
+
+#CATEGORY Хочу
+Quiero contarte un poco sobre mí. | Хочу немного рассказать тебе о себе.
+Quiero mejorar mi español hablando más. | Хочу улучшить свой испанский, больше разговаривая.
+No quiero aburrirte con tantos detalles. | Не хочу утомлять тебя таким количеством деталей.
+
+#CATEGORY Нужно
+Necesito practicar más mi español. | Мне нужно больше практиковать испанский.
+Necesito organizarme mejor entre el trabajo y mi hijo. | Мне нужно лучше организовываться между работой и сыном.
+A veces necesito explicarme de otra manera. | Иногда мне нужно объяснить по-другому.
+
+#CATEGORY Уточнение и переспрос
+¿Cómo se dice esto en español? | Как это сказать по-испански?
+Perdón, no entendí bien esa palabra. | Извини, я не очень понял это слово.
+¿Puedes repetir eso, por favor? | Можешь повторить это, пожалуйста?
+
+##BLOCK vocabulary | Ключевая лексика
+el programador / la programadora | программист
+el desarrollador de software | разработчик ПО
+a distancia / remoto | удалённо / удалённый
+la nacionalidad | национальность
+ruso/a | русский / русская
+el hijo | сын
+criar | растить / воспитывать
+mudarse | переезжать
+la empresa | компания
+el idioma | язык
+el acento | акцент
+la experiencia | опыт
+extranjero/a | иностранный / иностранец
+la aplicación web | веб-приложение
+
+##BLOCK story | Короткий рассказ
+ES: Me llamo Victor y tengo cuarenta años. Soy ruso, nací en Rusia, pero ahora vivo en Georgia con mi familia. Me mudé hace algunos años y todavía hablo español con acento, aunque estoy aprendiendo poco a poco. Soy programador de profesión: me dedico al desarrollo de aplicaciones web y trabajo a distancia para una empresa extranjera. Trabajar así me permite organizar mejor mi tiempo. Tengo un hijo pequeño, y para mí es lo más importante de mi vida. Intento pasar tiempo con él todas las tardes, después del trabajo, y le enseño un poco de ruso en casa. Me gustaría que creciera hablando varios idiomas. Todavía no hablo español perfectamente, pero quiero seguir practicando cada día.
+RU: Меня зовут Виктор, мне сорок лет. Я русский, родился в России, но сейчас живу в Грузии со своей семьёй. Я переехал несколько лет назад и всё ещё говорю по-испански с акцентом, хотя учусь постепенно. Я программист по профессии: занимаюсь разработкой веб-приложений и работаю удалённо на иностранную компанию. Такая работа позволяет мне лучше организовывать своё время. У меня есть маленький сын, и для меня это самое важное в жизни. Стараюсь проводить с ним время каждый вечер, после работы, и учу его немного русскому языку дома. Хотел бы, чтобы он рос, говоря на нескольких языках. Пока я не говорю по-испански идеально, но хочу продолжать практиковаться каждый день.

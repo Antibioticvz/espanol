@@ -1,0 +1,130 @@
+#TOPIC 2 | Готовка и кухня
+
+##BLOCK verb_group | Готовка — глаголы действия
+
+#WORD cocinar | готовить
+Voy a cocinar el almuerzo, ¿me ayudas? | Я приготовлю обед, поможешь мне?
+¿Qué vamos a cocinar hoy, pescado o pollo? | Что будем готовить сегодня, рыбу или курицу?
+Cocino mejor cuando tengo tiempo tranquilo. | Я готовлю лучше, когда есть спокойное время.
+
+#WORD preparar | готовить / накрывать
+Estoy preparando la cena, dame diez minutos. | Я готовлю ужин, дай мне десять минут.
+¿Puedes preparar la ensalada mientras yo hago el arroz? | Можешь приготовить салат, пока я делаю рис?
+Siempre preparo el desayuno rápido entre semana. | Я всегда готовлю завтрак быстро в будни.
+
+#WORD cortar | резать
+¿Puedes cortar las verduras mientras yo caliento el aceite? | Можешь порезать овощи, пока я разогреваю масло?
+Corta el pan en rebanadas finas, por favor. | Порежь хлеб тонкими ломтиками, пожалуйста.
+Este cuchillo no corta bien, necesito otro. | Этот нож плохо режет, мне нужен другой.
+
+#WORD picar | мелко резать
+Necesito picar el ajo para la salsa. | Мне нужно мелко порезать чеснок для соуса.
+¿Picaste la cebolla ya, o la pico yo? | Ты уже порезал(а) лук, или мне порезать?
+Pica la carne en trozos pequeños. | Нарежь мясо мелкими кусочками.
+
+#WORD mezclar | смешивать
+Mezcla la harina con los huevos, por favor. | Смешай, пожалуйста, муку с яйцами.
+No mezcles la salsa picante con la de los niños. | Не смешивай острый соус с тем, что для детей.
+Voy a mezclar todos los ingredientes secos primero. | Сначала я смешаю все сухие ингредиенты.
+
+#WORD calentar | разогревать
+Voy a calentar la comida de ayer. | Я разогрею вчерашнюю еду.
+¿Puedes calentar el horno a 180 grados? | Можешь разогреть духовку до 180 градусов?
+La sopa ya está caliente, no la calientes más. | Суп уже горячий, не разогревай больше.
+
+#WORD hervir | кипятить
+El agua ya está hirviendo, echa la pasta. | Вода уже кипит, клади макароны.
+Hierve las papas por veinte minutos. | Кипяти картошку двадцать минут.
+El arroz tarda menos en hervir que las papas. | Рис закипает быстрее, чем картошка.
+
+#WORD freír | жарить
+Estoy friendo unos huevos para el desayuno. | Я жарю яйца на завтрак.
+No frías el pescado con tanto aceite. | Не жарь рыбу с таким количеством масла.
+Frío las papas hasta que estén doradas. | Жарю картошку, пока не станет золотистой.
+
+#WORD hornear | печь в духовке
+Vamos a hornear galletas juntos esta tarde. | Давай сегодня вечером испечём печенье вместе.
+Hay que hornear el pollo una hora más. | Курицу нужно печь ещё час.
+Este pastel se hornea a temperatura baja. | Этот пирог печётся при низкой температуре.
+
+##BLOCK verb_group | Взаимодействие с семьёй
+
+#WORD lavarse | мыть(ся)
+Lávate las manos antes de comer. | Помой руки перед едой.
+Voy a lavar los platos después de cenar. | Я помою посуду после ужина.
+¿Ya lavaste las frutas? | Ты уже помыл(а) фрукты?
+
+#WORD poner la mesa | накрывать на стол
+¿Me ayudas a poner la mesa? | Поможешь накрыть на стол?
+Pon los vasos y los platos, por favor. | Поставь стаканы и тарелки, пожалуйста.
+Ya puse los cubiertos, falta el pan. | Я уже поставил(а) приборы, не хватает хлеба.
+
+#WORD ayudar | помогать
+¿Me ayudas a pelar las papas? | Поможешь почистить картошку?
+Mi hija siempre ayuda a poner la mesa. | Моя дочь всегда помогает накрывать на стол.
+¿Necesitas ayuda con la cena? | Тебе нужна помощь с ужином?
+
+#WORD probar | пробовать
+¿Quieres probar la salsa? Dime si le falta sal. | Хочешь попробовать соус? Скажи, не хватает ли соли.
+Prueba esto, creo que le falta un poco de limón. | Попробуй это, кажется, не хватает лимона.
+Mi hija nunca ha probado la comida picante. | Моя дочь никогда не пробовала острую еду.
+
+#WORD pedir | просить
+Mi hijo siempre pide probar la comida antes de que esté lista. | Мой сын всегда просит попробовать еду до того, как она готова.
+Te pido que no toques la sartén, está caliente. | Прошу тебя не трогать сковородку, она горячая.
+Le pedí a mi esposa que comprara más sal. | Я попросил жену купить ещё соли.
+
+#WORD tener cuidado | быть осторожным
+Ten cuidado, la sartén está caliente. | Будь осторожен, сковородка горячая.
+Tengo mucha hambre, ¿ya casi está la comida? | Я очень голоден, еда уже почти готова?
+Los niños tienen que tener cuidado con el cuchillo. | Детям нужно быть осторожными с ножом.
+
+##BLOCK verb_group | Завершение
+
+#WORD servir | подавать
+Voy a servir la sopa en un momento. | Я подам суп через минуту.
+Sírvete más arroz si quieres. | Положи себе ещё риса, если хочешь.
+¿Te sirvo un poco más de agua? | Налить тебе ещё немного воды?
+
+#WORD guardar | убирать на хранение
+Voy a guardar las sobras en la nevera. | Я уберу остатки в холодильник.
+Guarda el pan en la bolsa, se pone duro rápido. | Убери хлеб в пакет, он быстро черствеет.
+¿Dónde guardamos las especias? | Куда мы убираем специи?
+
+#WORD limpiar | убирать / чистить
+Después de cocinar, siempre limpio la cocina. | После готовки я всегда убираю кухню.
+¿Puedes limpiar la mesa mientras yo lavo los platos? | Можешь протереть стол, пока я мою посуду?
+Hay que limpiar el piso, se cayó aceite. | Нужно вымыть пол, пролилось масло.
+
+##BLOCK phrase_group | Ходовые фразы — где, хочу, нужно
+
+#CATEGORY Где что лежит
+¿Dónde está la sal? | Где соль?
+¿Dónde están los platos? | Где тарелки?
+¿Sabes dónde dejé el abrelatas? | Знаешь, куда я положил открывашку?
+
+#CATEGORY Хочу / не хочу
+Quiero un poco más de agua. | Хочу ещё немного воды.
+No quiero tanto picante. | Не хочу так остро.
+Quiero repetir, estaba muy rico. | Хочу добавки, было очень вкусно.
+
+#CATEGORY Нужно
+Necesito el cuchillo grande. | Мне нужен большой нож.
+Necesito que me pases la sal. | Мне нужно, чтобы ты передал(а) соль.
+Necesitamos comprar más leche. | Нам нужно купить ещё молока.
+
+#CATEGORY Есть / нет в наличии
+¿Tenemos leche todavía? | У нас ещё есть молоко?
+No hay más pan. | Хлеба больше нет.
+Falta sal en esta sopa. | В супе не хватает соли.
+Ya no queda aceite. | Масло закончилось.
+
+#CATEGORY Передай / принеси
+¿Me pasas el pan, por favor? | Передашь мне хлеб?
+¿Puedes alcanzarme un plato? | Можешь подать тарелку?
+Tráeme un vaso, por favor. | Принеси мне стакан.
+
+#CATEGORY Готово / не готово
+Ya está listo. | Уже готово.
+Todavía no está listo. | Ещё не готово.
+Está muy caliente, cuidado. | Очень горячее, осторожно.
