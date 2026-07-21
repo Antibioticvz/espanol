@@ -21,7 +21,11 @@ struct SessionTabView: View {
         case .config:
             SessionConfigView()
         case .player:
-            SessionPlayerView()
+            if env.sessionFlow.config.isFlashcards {
+                FlashcardView()
+            } else {
+                SessionPlayerView()
+            }
         case .completed:
             SessionCompletedView()
         }

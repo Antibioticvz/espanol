@@ -46,9 +46,13 @@ struct SessionCompletedView: View {
     private func resultsSection(_ result: SessionResult) -> some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
-                row("Фраз завершено", "\(result.phrasesCompleted) из \(result.phrasesTotal)")
+                row(result.accuracy == nil ? "Фраз завершено" : "Карточек",
+                    "\(result.phrasesCompleted) из \(result.phrasesTotal)")
                 row("Время сеанса", Format.duration(Double(result.durationSeconds)))
                 row("Среднее на фразу", Format.duration(Double(result.averageSecondsPerPhrase)))
+                if let accuracy = result.accuracy {
+                    row("Точность (с первого раза)", Format.percent(accuracy))
+                }
             }
         } label: {
             SectionHeaderLabel(emoji: "📊", title: "Результаты")

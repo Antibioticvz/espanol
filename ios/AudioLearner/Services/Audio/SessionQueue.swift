@@ -112,6 +112,8 @@ enum SessionQueueBuilder {
         case .cycleSession:
             let cycles = max(1, config.sessionCycles)
             return Array(repeating: pass, count: cycles).flatMap { $0 }
+        case .flashcards:
+            return [] // флеш-карты не используют аудио-очередь
         }
     }
 }

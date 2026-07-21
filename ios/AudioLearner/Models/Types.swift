@@ -45,11 +45,12 @@ enum LessonBlockType: String, Codable {
 
 // MARK: - Playback
 
-/// Режим воспроизведения сессии (спека §5).
+/// Режим сессии: три аудио-режима (спека §5) + флеш-карты (v1.1, D-19).
 enum PlaybackMode: String, CaseIterable, Codable, Identifiable {
-    case once      // Один раз
-    case loopPhrase // Цикл фразы
+    case once         // Один раз
+    case loopPhrase   // Цикл фраз
     case cycleSession // Цикл сессии N раз
+    case flashcards   // Флеш-карты (интерактивный режим)
 
     var id: String { rawValue }
 
@@ -58,6 +59,25 @@ enum PlaybackMode: String, CaseIterable, Codable, Identifiable {
         case .once: return "Один раз"
         case .loopPhrase: return "Цикл фраз"
         case .cycleSession: return "Цикл сессии"
+        case .flashcards: return "Флеш-карты"
+        }
+    }
+
+    /// Аудио-режимы очереди (в отличие от интерактивных флеш-карт).
+    var isAudioQueue: Bool { self != .flashcards }
+}
+
+/// Направление показа флеш-карты: что показываем первым (вопрос).
+enum FlashcardDirection: String, CaseIterable, Codable, Identifiable {
+    case esToRu // вопрос ES → ответ RU (дефолт)
+    case ruToEs // вопрос RU → ответ ES
+
+    var id: String { rawValue }
+
+    var titleRu: String {
+        switch self {
+        case .esToRu: return "Испанский → русский"
+        case .ruToEs: return "Русский → испанский"
         }
     }
 }

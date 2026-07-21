@@ -19,8 +19,15 @@ struct SessionConfig: Codable, Equatable {
     var lockScreenTextMode: LockScreenTextMode
     /// Обновлять ли state фраз во время воспроизведения.
     var trackProgress: Bool
+    /// Флеш-карты: направление вопрос→ответ.
+    var flashcardDirection: FlashcardDirection
+    /// Флеш-карты: автопроигрывание аудио при показе стороны карточки.
+    var flashcardAutoplay: Bool
 
     static let allowedSpeeds: [Double] = [0.5, 0.75, 1.0, 1.5, 2.0]
+
+    /// Режим флеш-карт активен.
+    var isFlashcards: Bool { playbackMode == .flashcards }
 
     static let `default` = SessionConfig(
         phraseIds: [],
@@ -30,7 +37,9 @@ struct SessionConfig: Codable, Equatable {
         playbackMode: .once,
         sessionCycles: 2,
         lockScreenTextMode: .both,
-        trackProgress: true
+        trackProgress: true,
+        flashcardDirection: .esToRu,
+        flashcardAutoplay: true
     )
 
     /// Оценка длительности сессии по фактическим длительностям аудио (сек).
