@@ -28,3 +28,6 @@ xcuserdata/
 # Временные
 tmp/
 *.tmp
+
+# Claude worktrees
+.claude/
