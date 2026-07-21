@@ -1,8 +1,16 @@
-import { BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const dirnameHere = fileURLToPath(new URL('.', import.meta.url))
+
+/**
+ * Иконка для DEV-режима (npm run dev, до упаковки): в собранном .app иконку даёт combine-icon.icns
+ * через electron-builder.yml (mac.icon), но во время разработки Electron показывает свою дефолтную
+ * иконку в Dock/окне. combine/build/icon.png (скопирован из shared/branding/combine-icon-1024.png)
+ * решает это для dev — см. app.dock.setIcon() ниже и BrowserWindow#icon.
+ */
+const devIconPath = join(dirnameHere, '../../build/icon.png')
 
 /**
  * Единственное окно приложения (single-window, см. GenerationSession) — но окно может быть
@@ -27,7 +35,12 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 960,
     minHeight: 640,
     show: false,
-    title: 'Combine — генератор аудио-уроков испанского',
+    title: `Combine ${app.getVersion()} — генератор аудио-уроков испанского`,
+    // Иконка окна (значимо для Windows/Linux title bar + taskbar; на macOS игнорируется для
+    // самого окна, но не мешает). Только в dev — в упакованном .app иконку даёт .icns бандла,
+    // а build/icon.png не входит в files электрон-билдера (нет смысла резолвить путь, которого
+    // не будет в asar/resources после упаковки).
+    icon: app.isPackaged ? undefined : devIconPath,
     webPreferences: {
       preload: join(dirnameHere, '../preload/index.js'),
       contextIsolation: true,
@@ -35,6 +48,12 @@ export function createMainWindow(): BrowserWindow {
       sandbox: true
     }
   })
+
+  // Dock-иконка в dev-режиме на macOS (app.dock недоступен на других платформах) — тот же
+  // приём, что и BrowserWindow#icon выше, только для Dock, а не для самого окна.
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    app.dock?.setIcon(devIconPath)
+  }
 
   currentWindow = win
   win.once('ready-to-show', () => win.show())

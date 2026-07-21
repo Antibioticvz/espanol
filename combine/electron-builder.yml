@@ -1,0 +1,18 @@
+# electron-builder — сборка Combine 1.1 для личного использования (macOS, DMG, без подписи).
+appId: com.victor.combine
+productName: Combine
+directories:
+  output: release
+  buildResources: build
+# electron-vite кладёт main/preload/renderer в out/** (см. electron.vite.config.ts) — упаковываем
+# только это + package.json (main-поле), без src/тестов/конфигов сборки.
+files:
+  - out/**/*
+  - package.json
+mac:
+  target: dmg
+  icon: build/icon.icns
+  category: public.app-category.education
+  # Личное использование — без Apple Developer ID; unsigned build (identity: null отключает
+  # попытку найти сертификат для codesign, иначе electron-builder падает на машине без Keychain-сертификата).
+  identity: null
