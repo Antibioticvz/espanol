@@ -17,6 +17,29 @@ export class LessonJsonValidationError extends Error {
   }
 }
 
+/**
+ * Мульти-верификаторное ревью: shared/lesson.schema.json (см. комментарий у поля blocks) описывает
+ * инвариант "в экспортированном ZIP все элементы должны быть done" ПРОЗОЙ — сам JSON Schema enum
+ * (pending/generating/done/failed) допускает любой статус, так что ajv-валидация его не ловит.
+ * Экспорт (ZIP для iOS, .apkg для Anki) частично сгенерированного урока даёт архив со ссылками на
+ * несуществующие mp3-файлы. Оба вызывающих (cli/commands/export.ts, main/ipc-handlers.ts) должны
+ * явно проверить это ПЕРЕД экспортом — вынесено сюда одним местом, чтобы не разойтись.
+ */
+export class LessonNotCompleteError extends Error {
+  constructor(
+    readonly topicId: string,
+    readonly doneItems: number,
+    readonly totalItems: number,
+    readonly failedItems: number
+  ) {
+    super(
+      `Урок «${topicId}» не полностью готов: ${doneItems}/${totalItems} done, ${failedItems} failed. ` +
+        'Экспорт отменён — доозвучьте урок или используйте флаг для явного разрешения частичного экспорта.'
+    )
+    this.name = 'LessonNotCompleteError'
+  }
+}
+
 export interface Id3TagsInput {
   /** Всегда ES-текст фразы, независимо от языка файла (см. docs/SPEC_COMBINE.md §5.3). */
   title: string
@@ -253,6 +276,16 @@ export class FileService {
       doneItems: done,
       totalItems: items.length,
       failedItems: failed
+    }
+  }
+
+  /** Бросает LessonNotCompleteError, если хотя бы один элемент не done — см. класс-докстринг. */
+  assertLessonComplete(lesson: LessonJson): void {
+    const items = collectItems(lesson)
+    const done = items.filter((i) => i.status === 'done').length
+    const failed = items.filter((i) => i.status === 'failed').length
+    if (failed > 0 || done < items.length) {
+      throw new LessonNotCompleteError(lesson.topic_id, done, items.length, failed)
     }
   }
 

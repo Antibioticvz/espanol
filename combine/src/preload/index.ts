@@ -8,6 +8,7 @@ import type { LessonSummary } from '../core/file/file.service'
 import type { TestGenerationParams, TestGenerationResult } from '../main/test-generation'
 import type { ApiKeyStatus } from '../core/settings/settings.service'
 import type {
+  ActiveGenerationResult,
   ApiKeyStatusResult,
   CombineIpcApi,
   EstimateCostInput,
@@ -146,6 +147,8 @@ const combineApi: CombineIpcApi = {
     ipcRenderer.on('combine:generation:progress', listener)
     return () => ipcRenderer.removeListener('combine:generation:progress', listener)
   },
+  /** Мульти-верификаторное ревью — переподключение окна к уже идущей генерации, см. useGeneration.ts. */
+  getActiveGeneration: (): Promise<ActiveGenerationResult | null> => ipcRenderer.invoke('combine:api:get-active-generation'),
 
   listLibrary: (): Promise<LibraryEntry[]> => ipcRenderer.invoke('combine:api:list-library'),
   exportZip: (input: GenerationRunRef): Promise<ExportZipResult> => ipcRenderer.invoke('combine:api:export-zip', input),

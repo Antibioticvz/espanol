@@ -92,6 +92,21 @@ function resetItemStatus(item: { status: ItemStatus; error?: string | null }, mo
  *  - isActive() никогда не возвращала false обратно (queue не обнулялся) — теперь finalize()
  *    (в finally, чтобы отработало и при ошибке записи) обнуляет this.queue.
  *
+ * Третий раунд ревью (мульти-верификаторное) нашёл ещё два взаимосвязанных бага с isActive(),
+ * оба тоже исправлены:
+ *  - TOCTOU: isActive() проверялась синхронно в начале start()/startParsed()/startRegenerate(),
+ *    но this.queue присваивался лишь в самом конце (после кучи await — createProvider/resolveVoices/
+ *    чтение-запись lesson.json/проверка ffmpeg). Два перекрывающихся вызова (двойной клик,
+ *    гонка IPC) оба проходили guard, пока this.queue===null, давая ДВЕ живые очереди на одну
+ *    сессию — вторая перезаписывала поля первой, первая продолжала крутиться осиротевшей.
+ *    Теперь синхронный флаг this.starting выставляется ДО первого await (учитывается в isActive())
+ *    и снимается в finally — второй перекрывающийся вызов видит занятость немедленно.
+ *  - cancel() ставил runState='cancelled' в очереди, но GenerationQueue эмитит событие
+ *    runState==='done' ТОЛЬКО при истинном завершении (см. generation-queue.ts) — после cancel
+ *    оно никогда не приходит, finalize() (единственное место, где this.queue=null) не вызывается,
+ *    и isActive() навсегда остаётся true до перезапуска приложения. Теперь cancel() сам дожидается
+ *    лёгкой финализации (см. finalizeCancelled()) без пересчёта итоговой статистики.
+ *
  * Класс экспортирован (не только синглтон-инстанс ниже) специально для тестов — позволяет
  * создавать изолированные инстансы с замоканным services-bootstrap#getAppContext() вместо
  * общего состояния синглтона.
@@ -103,15 +118,35 @@ export class GenerationSession {
   private topicId: string | null = null
   private outputRoot: string | null = null
   private addId3 = true
+  /**
+   * Синхронный барьер против TOCTOU (см. класс-докстринг): выставляется ДО первого await в
+   * start()/startParsed()/startRegenerate(), снимается в их finally (успех ИЛИ ошибка). this.queue
+   * присваивается лишь позже, синхронно внутри runQueue() — окно между "уже решили стартовать" и
+   * "this.queue стал не-null" не должно пропускать второй параллельный вызов.
+   */
+  private starting = false
   /** Сериализует все writeLessonJson() этого сеанса — см. класс-докстринг и docstring persist(). */
   private persistChain: Promise<void> = Promise.resolve()
 
   isActive(): boolean {
-    return this.queue !== null
+    return this.starting || this.queue !== null
   }
 
   getTopicId(): string | null {
     return this.topicId
+  }
+
+  /**
+   * Снимок уже идущего прогона (или null) — см. shared/ipc.ts#ActiveGenerationResult. Позволяет
+   * пересозданному renderer-окну (macOS: закрытие окна не завершает приложение, генерация
+   * продолжается в main в фоне — см. класс-докстринг) переподключиться к реально активной сессии
+   * вместо того, чтобы стартовать с topicId=null и молча "терять" её из вида (мульти-верификаторное
+   * ревью). this.starting намеренно НЕ учитывается: до появления this.queue снимок отдавать нечего
+   * (окно подключения в это TOCTOU-окно — доли секунды, следующий вызов почти сразу вернёт снимок).
+   */
+  getActiveSnapshot(): { topicId: string; lesson: LessonJson; runState: ReturnType<GenerationQueue['getRunState']> } | null {
+    if (!this.queue || !this.lessonJson || !this.topicId) return null
+    return { topicId: this.topicId, lesson: this.lessonJson, runState: this.queue.getRunState() }
   }
 
   /** Новая генерация из сырого текста (импорт) — резюмирует, если lesson.json для topic_id уже есть. */
@@ -119,12 +154,17 @@ export class GenerationSession {
     if (this.isActive()) {
       throw new Error('Генерация уже выполняется — дождитесь завершения, поставьте на паузу или отмените текущую.')
     }
-    const parseResult = new ParserService().parse(params.inputText)
-    if (!parseResult.lesson || parseResult.errors.length > 0) {
-      const details = parseResult.errors.map((e) => (e.line !== null ? `строка ${e.line}: ${e.message}` : e.message)).join('; ')
-      throw new Error(`Ошибки парсера (${parseResult.errors.length}): ${details}`)
+    this.starting = true
+    try {
+      const parseResult = new ParserService().parse(params.inputText)
+      if (!parseResult.lesson || parseResult.errors.length > 0) {
+        const details = parseResult.errors.map((e) => (e.line !== null ? `строка ${e.line}: ${e.message}` : e.message)).join('; ')
+        throw new Error(`Ошибки парсера (${parseResult.errors.length}): ${details}`)
+      }
+      return await this.startCommon(parseResult.lesson, params.settings, params.apiKey ?? null, onProgress)
+    } finally {
+      this.starting = false
     }
-    return this.startCommon(parseResult.lesson, params.settings, params.apiKey ?? null, onProgress)
   }
 
   /** Вариант start() для уже разобранного (renderer уже вызвал parseText()) урока — см. StartParsedGenerationParams. */
@@ -135,9 +175,22 @@ export class GenerationSession {
     if (this.isActive()) {
       throw new Error('Генерация уже выполняется — дождитесь завершения, поставьте на паузу или отмените текущую.')
     }
-    return this.startCommon(params.lesson, params.settings, params.apiKey ?? null, onProgress)
+    this.starting = true
+    try {
+      return await this.startCommon(params.lesson, params.settings, params.apiKey ?? null, onProgress)
+    } finally {
+      this.starting = false
+    }
   }
 
+  /**
+   * ВАЖНО (D-20 + мульти-верификаторное ревью): при резюме (lesson.json для topicId уже существует)
+   * provider/голоса берутся из УЖЕ СОХРАНЁННОГО lessonJson.config, а НЕ из текущих settings — иначе
+   * оставшиеся (pending/failed) фразы озвучиваются другим провайдером/голосом/моделью, чем уже
+   * готовая часть урока (напр. переключил providers в настройках между запусками -> смешение
+   * голосов в одном уроке, а иногда и невалидный model_id для реального API). Ровно та же логика,
+   * что уже была в startRegenerate() ниже — здесь применяем её и к "повторный импорт того же текста".
+   */
   private async startCommon(
     lesson: ParsedLesson,
     settings: AppSettings,
@@ -145,18 +198,25 @@ export class GenerationSession {
     onProgress: (event: GenerationProgressEvent) => void
   ): Promise<StartGenerationOutcome> {
     const { fileService } = getAppContext()
-
-    const provider = await this.createProvider(settings.provider, settings.queue.maxRetries, apiKey, settings.normalizeAudio)
-    const { voiceEs, voiceRu } = await this.resolveVoices(provider, settings.voiceEs?.id, settings.voiceRu?.id)
-
     const topicId = lesson.topicId
     const outputRoot = settings.outputDir
     const resuming = await fileService.lessonExists(outputRoot, topicId)
 
     let lessonJson: LessonJson
+    let provider: TTSProvider
+    let voiceEs: VoiceRef
+    let voiceRu: VoiceRef
+
     if (resuming) {
       lessonJson = await fileService.readLessonJson(outputRoot, topicId)
+      provider = await this.createProvider(lessonJson.config.provider, settings.queue.maxRetries, apiKey, settings.normalizeAudio)
+      voiceEs = lessonJson.config.voice_es
+      voiceRu = lessonJson.config.voice_ru
     } else {
+      provider = await this.createProvider(settings.provider, settings.queue.maxRetries, apiKey, settings.normalizeAudio)
+      const resolved = await this.resolveVoices(provider, settings.voiceEs?.id, settings.voiceRu?.id)
+      voiceEs = resolved.voiceEs
+      voiceRu = resolved.voiceRu
       const stats = computeStats(lesson)
       lessonJson = buildLessonSkeleton(
         lesson,
@@ -194,7 +254,14 @@ export class GenerationSession {
     return { topicId, lesson: lessonJson }
   }
 
-  /** «Переделать всё» / «Переделать only failed» из библиотеки — использует config уже сохранённый в lesson.json. */
+  /**
+   * «Переделать всё» / «Переделать only failed» из библиотеки — использует config уже сохранённый
+   * в lesson.json. ВАЖНО (мульти-верификаторное ревью): createProvider() вызывается ДО сброса
+   * статусов и записи lesson.json — если он бросает (напр. elevenlabs без сохранённого/с
+   * повреждённым ключом), lesson.json полностью готового урока должен остаться НЕТРОНУТЫМ, а не
+   * потерять done-метки необратимо. Раньше reset+persist шли первыми, и неудавшийся createProvider
+   * оставлял урок помеченным полностью несделанным при реально готовых mp3 на диске.
+   */
   async startRegenerate(
     params: RegenerateParams,
     onProgress: (event: GenerationProgressEvent) => void
@@ -202,38 +269,46 @@ export class GenerationSession {
     if (this.isActive()) {
       throw new Error('Генерация уже выполняется — дождитесь завершения, поставьте на паузу или отмените текущую.')
     }
-    const { fileService } = getAppContext()
-    const lessonJson = await fileService.readLessonJson(params.outputRoot, params.topicId)
+    this.starting = true
+    try {
+      const { fileService } = getAppContext()
+      const lessonJson = await fileService.readLessonJson(params.outputRoot, params.topicId)
 
-    for (const block of lessonJson.blocks) {
-      if (isGroupsBlockJson(block)) {
-        for (const group of block.groups) for (const phrase of group.phrases) resetItemStatus(phrase, params.mode)
-      } else if (block.type === 'vocabulary') {
-        for (const word of block.words) resetItemStatus(word, params.mode)
-      } else {
-        resetItemStatus(block, params.mode)
+      // Всё, что может бросить (в первую очередь — отсутствующий/повреждённый API-ключ ElevenLabs),
+      // должно случиться ДО необратимого сброса+персиста статусов ниже.
+      const normalizeAudio = params.normalizeAudio ?? true
+      const provider = await this.createProvider(lessonJson.config.provider, params.queueConfig.maxRetries, null, normalizeAudio)
+      await this.logNormalizationStatus(fileService, params.outputRoot, params.topicId, provider.id, normalizeAudio)
+
+      for (const block of lessonJson.blocks) {
+        if (isGroupsBlockJson(block)) {
+          for (const group of block.groups) for (const phrase of group.phrases) resetItemStatus(phrase, params.mode)
+        } else if (block.type === 'vocabulary') {
+          for (const word of block.words) resetItemStatus(word, params.mode)
+        } else {
+          resetItemStatus(block, params.mode)
+        }
       }
+      await fileService.writeLessonJson(params.outputRoot, params.topicId, lessonJson)
+
+      const pricing = new CostCalculator(params.pricePerThousandChars)
+
+      this.runQueue({
+        topicId: params.topicId,
+        outputRoot: params.outputRoot,
+        lessonJson,
+        provider,
+        voices: { es: lessonJson.config.voice_es, ru: lessonJson.config.voice_ru },
+        queueConfig: params.queueConfig,
+        addId3: true,
+        pricing,
+        onProgress
+      })
+
+      return { topicId: params.topicId, lesson: lessonJson }
+    } finally {
+      this.starting = false
     }
-    await fileService.writeLessonJson(params.outputRoot, params.topicId, lessonJson)
-
-    const normalizeAudio = params.normalizeAudio ?? true
-    const provider = await this.createProvider(lessonJson.config.provider, params.queueConfig.maxRetries, null, normalizeAudio)
-    await this.logNormalizationStatus(fileService, params.outputRoot, params.topicId, provider.id, normalizeAudio)
-    const pricing = new CostCalculator(params.pricePerThousandChars)
-
-    this.runQueue({
-      topicId: params.topicId,
-      outputRoot: params.outputRoot,
-      lessonJson,
-      provider,
-      voices: { es: lessonJson.config.voice_es, ru: lessonJson.config.voice_ru },
-      queueConfig: params.queueConfig,
-      addId3: true,
-      pricing,
-      onProgress
-    })
-
-    return { topicId: params.topicId, lesson: lessonJson }
   }
 
   pause(): void {
@@ -254,8 +329,19 @@ export class GenerationSession {
     })
   }
 
-  cancel(): void {
-    this.queue?.cancel()
+  /**
+   * cancel() ДОЛЖЕН оставлять isActive()===false к моменту резолва — иначе (баг мульти-верификаторного
+   * ревью) сессия заклинивала навсегда: GenerationQueue эмитит runState==='done' ТОЛЬКО при истинном
+   * завершении (не при отмене), а finalize() — единственное место, обнуляющее this.queue, — триггерится
+   * только этим событием. queue.cancel() ставит runState='cancelled' и синхронно эмитит progress с
+   * ним (полезно для renderer — статус меняется мгновенно), но сам НЕ ждёт in-flight ES/RU-запросы:
+   * они доигрывают в фоне как и раньше (см. класс-докстринг про inFlight/pause) — cancel() их не
+   * прерывает и не ждёт, лишь фиксирует уже сделанное и делает сессию сразу пригодной для нового старта.
+   */
+  async cancel(): Promise<void> {
+    if (!this.queue) return
+    this.queue.cancel()
+    await this.finalizeCancelled()
   }
 
   /**
@@ -436,6 +522,32 @@ export class GenerationSession {
     } finally {
       // ВСЕГДА обнуляем, даже если запись выше упала — иначе isActive() навсегда останется true
       // и приложение больше никогда не даст запустить новую генерацию (issue #6).
+      this.queue = null
+    }
+  }
+
+  /**
+   * Лёгкая финализация после cancel() — в отличие от finalize() (событие 'done'), НЕ пересчитывает
+   * итоговую статистику (actual_cost_usd/duration/file_size_mb): отмена — это не "урок готов",
+   * пересчёт стоимости по неполному набору done-элементов был бы просто неверным числом. Просто
+   * фиксирует на диске то, что реально успело сделаться к моменту отмены (persist()), и освобождает
+   * сессию — чтобы isActive() сразу стал false и можно было немедленно запустить новую генерацию
+   * (см. cancel()). Не ждёт и не отменяет in-flight ES/RU-запросы — они дописываются в фоне сами.
+   */
+  private async finalizeCancelled(): Promise<void> {
+    if (!this.queue) return // уже финализировано (защита от повторного вызова)
+    try {
+      await this.persist()
+      if (this.outputRoot && this.topicId) {
+        await getAppContext().fileService.appendGenerationLog(
+          this.outputRoot,
+          this.topicId,
+          'Генерация отменена пользователем — прогресс сохранён, можно запустить новую генерацию.'
+        )
+      }
+    } catch (e) {
+      console.warn(`[GenerationSession] Ошибка при финализации отменённой генерации: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
       this.queue = null
     }
   }
