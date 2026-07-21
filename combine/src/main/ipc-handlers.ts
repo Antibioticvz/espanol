@@ -13,8 +13,10 @@ import { runTestGeneration, type TestGenerationParams } from './test-generation'
 import { getCurrentWindow } from './window'
 import { assertKnownOutputRoot, assertSaneOutputRoot } from './path-guard'
 import { buildLibraryEntries, readPhraseAudioDataUrl } from './combine-api-support'
+import { defaultApkgPath, exportLessonToAnki } from '../core/anki/anki-export.service'
 import type {
   EstimateCostInput,
+  ExportAnkiInput,
   GenerationRunRef,
   GetPhraseAudioInput,
   ListVoicesInput,
@@ -301,5 +303,14 @@ function registerFlatApiHandlers(ctx: ReturnType<typeof getAppContext>): void {
   ipcMain.handle('combine:api:get-phrase-audio', async (_event, input: GetPhraseAudioInput) => {
     const settings = await ctx.settingsService.load(ctx.defaultOutputDir)
     return readPhraseAudioDataUrl(ctx.fileService, settings.outputDir, input.topicId, input.phraseId, input.lang)
+  })
+
+  // v1.1: экспорт урока в Anki .apkg — пункт меню карточки урока в Библиотеке «Экспорт в Anki».
+  ipcMain.handle('combine:api:export-anki', async (_event, input: ExportAnkiInput) => {
+    const settings = await ctx.settingsService.load(ctx.defaultOutputDir)
+    const lesson = await ctx.fileService.readLessonJson(settings.outputDir, input.topicId)
+    const lessonDir = ctx.fileService.lessonDir(settings.outputDir, input.topicId)
+    const destApkg = defaultApkgPath(settings.outputDir, input.topicId)
+    return exportLessonToAnki(lesson, lessonDir, destApkg)
   })
 }

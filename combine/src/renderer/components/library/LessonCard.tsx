@@ -53,6 +53,13 @@ export function LessonCard({ entry, onGenerationStarted }: LessonCardProps): JSX
                 }}
               />
               <MenuItem
+                label="Экспорт в Anki"
+                onClick={() => {
+                  setMenuOpen(false)
+                  actions.exportAnki.mutate({ topicId: lesson.topic_id })
+                }}
+              />
+              <MenuItem
                 label="Просмотр JSON"
                 onClick={() => {
                   setMenuOpen(false)
