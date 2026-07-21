@@ -18,6 +18,7 @@ import { DEFAULT_PRICING } from '../../core/types/settings'
 import type { LessonJson, VoiceRef } from '../../core/types/lesson-json'
 import type { GenerationTask, QueueConfig } from '../../core/types/generation'
 import { getSharedSchemaPath } from '../../core/util/paths'
+import { isFfmpegAvailable } from '../../core/util/ffmpeg'
 import { boolFlag, numFlag, strFlag, type CliFlags } from '../args'
 
 function clamp(value: number, min: number, max: number): number {
@@ -150,17 +151,19 @@ async function generateOneTopic(inputPath: string, outRoot: string, providerName
     const stability = flags.stability !== undefined ? clamp(numFlag(flags, 'stability', 0.5), 0, 1) : null
     const similarityBoost = flags['similarity-boost'] !== undefined ? clamp(numFlag(flags, 'similarity-boost', 0.75), 0, 1) : null
     const seed = flags.seed !== undefined ? Math.max(0, Math.trunc(numFlag(flags, 'seed', 0))) : null
+    // v1.2 (D-23): нормализация громкости включена по умолчанию — см. --no-normalize в usage.
+    const normalizeAudio = !boolFlag(flags, 'no-normalize')
 
     let provider: TTSProvider
     if (providerName === 'mock_say') {
-      provider = new MockSayService()
+      provider = new MockSayService({ normalize: normalizeAudio })
     } else {
       const apiKey = strFlag(flags, 'api-key') ?? process.env.ELEVENLABS_API_KEY
       if (!apiKey) {
         console.error('Для provider=elevenlabs укажите ключ: --api-key <ключ> или переменная окружения ELEVENLABS_API_KEY.')
         return { code: 1, topicId: null, error: 'не задан API-ключ ElevenLabs' }
       }
-      provider = new ElevenLabsService({ apiKey, maxRetries: queueConfig.maxRetries })
+      provider = new ElevenLabsService({ apiKey, maxRetries: queueConfig.maxRetries, normalize: normalizeAudio })
     }
 
     const preferredEs = strFlag(flags, 'voice-es') ?? null
@@ -208,6 +211,21 @@ async function generateOneTopic(inputPath: string, outRoot: string, providerName
         stats
       )
       await fileService.writeLessonJson(outRoot, topicId, lessonJson)
+    }
+
+    // v1.2 (D-23): один раз на весь прогон (не по фразе) — см. тот же приём в GenerationSession.
+    if (provider.id === 'elevenlabs') {
+      if (!normalizeAudio) {
+        console.log('Нормализация громкости выключена (--no-normalize) — фразы сохранены как есть.')
+        await fileService.appendGenerationLog(outRoot, topicId, 'Нормализация громкости выключена (--no-normalize) — фразы сохранены как есть.')
+      } else {
+        const ffmpegOk = await isFfmpegAvailable()
+        const line = ffmpegOk
+          ? 'Нормализация громкости: ffmpeg найден — применяется loudnorm (EBU R128, I=-18 LUFS) к каждой фразе.'
+          : 'Нормализация громкости недоступна: ffmpeg не найден в PATH — фразы сохранены без нормализации (установите ffmpeg, напр. `brew install ffmpeg`).'
+        console.log(line)
+        await fileService.appendGenerationLog(outRoot, topicId, line)
+      }
     }
 
     const audioRoot = fileService.lessonDir(outRoot, topicId)

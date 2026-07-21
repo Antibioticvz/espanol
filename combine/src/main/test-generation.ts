@@ -22,6 +22,8 @@ export interface TestGenerationParams {
    * Опционален и обратносовместим: вложенный `window.combine` (combine:test-generate) его не шлёт.
    */
   apiKey?: string | null
+  /** v1.2 (D-23): нормализация громкости (AppSettings.normalizeAudio). По умолчанию true. */
+  normalize?: boolean
 }
 
 export interface TestGenerationResult {
@@ -29,6 +31,7 @@ export interface TestGenerationResult {
   durationMs: number
   characters: number
   costUsd: number
+  normalizationNote?: string | null
 }
 
 /**
@@ -37,10 +40,11 @@ export interface TestGenerationResult {
  * целой темы. Работает и с mock_say (бесплатно), и с elevenlabs (реальная стоимость ~$0.003).
  */
 export async function runTestGeneration(params: TestGenerationParams): Promise<TestGenerationResult> {
+  const normalize = params.normalize ?? true
   const provider =
     params.provider === 'mock_say'
-      ? new MockSayService()
-      : new ElevenLabsService({ apiKey: await resolveApiKey(params.apiKey), maxRetries: 1 })
+      ? new MockSayService({ normalize })
+      : new ElevenLabsService({ apiKey: await resolveApiKey(params.apiKey), maxRetries: 1, normalize })
 
   const result = await provider.synthesize({
     text: params.text,
@@ -59,7 +63,8 @@ export async function runTestGeneration(params: TestGenerationParams): Promise<T
     audioBase64: result.audio.toString('base64'),
     durationMs: result.durationMs,
     characters: result.characters,
-    costUsd
+    costUsd,
+    normalizationNote: result.normalizationNote ?? null
   }
 }
 

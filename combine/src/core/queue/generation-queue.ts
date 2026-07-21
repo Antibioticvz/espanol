@@ -283,9 +283,17 @@ export class GenerationQueue extends EventEmitter {
 
     if (this.onAudioSaved) await this.onAudioSaved(task, lang, outPath, result.durationMs)
 
+    // v1.2 (D-23): заметка о нормализации громкости (только у ElevenLabs — см. TtsSynthesizeResult) —
+    // сразу видна в live-логе экрана генерации/CLI; консолидированная запись в generation.log
+    // пишется один раз на весь прогон (см. GenerationSession/cli generate.ts — не по фразе, иначе
+    // на 80-фразовом уроке лог раздувается идентичными строками).
+    const logLine = result.normalizationNote
+      ? `[OK] ${task.phraseId} (${lang.toUpperCase()}) готово, ${result.durationMs}мс — ${result.normalizationNote}`
+      : `[OK] ${task.phraseId} (${lang.toUpperCase()}) готово, ${result.durationMs}мс`
+
     this.emitProgress({
       item: { phraseId: task.phraseId, lang, status: 'done', durationMs: result.durationMs },
-      logLine: `[OK] ${task.phraseId} (${lang.toUpperCase()}) готово, ${result.durationMs}мс`
+      logLine
     })
   }
 }

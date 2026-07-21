@@ -95,3 +95,97 @@ export async function encodePcmToMp3(samples: Int16Array, sampleRate: number, kb
 export function pcmDurationMs(samples: Int16Array, sampleRate: number): number {
   return Math.round((samples.length / sampleRate) * 1000)
 }
+
+// ---------------------------------------------------------------------------
+// Нормализация громкости (v1.2, D-23) — RMS-нормализация для mock_say (см. docs/DECISIONS.md).
+// ElevenLabs отдаёт готовый MP3 (не PCM) и нормализуется отдельно, через внешний ffmpeg
+// (core/util/ffmpeg.ts) — здесь только PCM-путь, для которого не нужен никакой внешний бинарник.
+// ---------------------------------------------------------------------------
+
+export interface NormalizePcmOptions {
+  /** Целевой уровень RMS в dBFS. По умолчанию -20 (типичный "разговорный" таргет для TTS-контента). */
+  targetDbfs?: number
+  /** Пик НИКОГДА не должен превысить этот уровень (защита от клиппинга) — важнее targetDbfs. */
+  peakLimitDbfs?: number
+  /** RMS тише этого порога (dBFS) считается "почти тишиной" и не усиливается — см. докстринг ниже. */
+  silenceRmsThresholdDbfs?: number
+}
+
+const DEFAULT_TARGET_DBFS = -20
+const DEFAULT_PEAK_LIMIT_DBFS = -1
+const DEFAULT_SILENCE_RMS_THRESHOLD_DBFS = -50
+const INT16_FULL_SCALE = 32767
+
+function dbfsToLinear(dbfs: number): number {
+  return Math.pow(10, dbfs / 20) * INT16_FULL_SCALE
+}
+
+function linearToDbfs(linear: number): number {
+  if (linear <= 0) return -Infinity
+  return 20 * Math.log10(linear / INT16_FULL_SCALE)
+}
+
+function computeRms(samples: Int16Array): number {
+  if (samples.length === 0) return 0
+  let sumSquares = 0
+  for (let i = 0; i < samples.length; i++) sumSquares += samples[i] * samples[i]
+  return Math.sqrt(sumSquares / samples.length)
+}
+
+function computePeakAbs(samples: Int16Array): number {
+  let peak = 0
+  for (let i = 0; i < samples.length; i++) {
+    const abs = Math.abs(samples[i])
+    if (abs > peak) peak = abs
+  }
+  return peak
+}
+
+/** Только для тестов/диагностики — что нормализация "видит" в сигнале, без его изменения. */
+export function measureLoudness(samples: Int16Array): { rmsDbfs: number; peakDbfs: number } {
+  return { rmsDbfs: linearToDbfs(computeRms(samples)), peakDbfs: linearToDbfs(computePeakAbs(samples)) }
+}
+
+/**
+ * RMS-нормализация 16-bit PCM к целевому уровню (по умолчанию -20 dBFS RMS) с жёстким пик-лимитом
+ * (по умолчанию -1 dBFS): громкость каждой фразы приводится примерно к одному уровню, но усиление
+ * НИКОГДА не позволяет пику превысить лимит — при конфликте (тихая, но с уже почти full-scale
+ * пиком фраза — напр. импульсный шум/щелчок) побеждает пик-лимит, а не целевой RMS: "не клиппить"
+ * важнее точного попадания в target.
+ *
+ * Почти тишина (RMS ниже silenceRmsThresholdDbfs — напр. фраза-пауза или фоновый шум без речи) НЕ
+ * усиливается вовсе: наивная RMS-нормализация подняла бы фоновый шум до целевого уровня, отчего
+ * тихая "фраза" звучала бы ГРОМЧЕ окружающих осмысленных фраз — то есть хуже исходной проблемы
+ * разнобоя громкости, которую нормализация должна решать.
+ *
+ * Возвращает НОВЫЙ Int16Array при реальном изменении усиления; при "нет усиления"/"уже близко
+ * к цели"/"тишина" возвращает ТОТ ЖЕ samples без копирования (нет смысла аллоцировать зря).
+ */
+export function normalizePcmRms(samples: Int16Array, options: NormalizePcmOptions = {}): Int16Array {
+  const targetDbfs = options.targetDbfs ?? DEFAULT_TARGET_DBFS
+  const peakLimitDbfs = options.peakLimitDbfs ?? DEFAULT_PEAK_LIMIT_DBFS
+  const silenceThresholdDbfs = options.silenceRmsThresholdDbfs ?? DEFAULT_SILENCE_RMS_THRESHOLD_DBFS
+
+  const rms = computeRms(samples)
+  if (rms <= 0 || linearToDbfs(rms) < silenceThresholdDbfs) return samples // почти тишина — не трогаем
+
+  const peak = computePeakAbs(samples)
+  if (peak <= 0) return samples
+
+  const targetRmsLinear = dbfsToLinear(targetDbfs)
+  const peakLimitLinear = dbfsToLinear(peakLimitDbfs)
+
+  let gain = targetRmsLinear / rms
+  const maxGainForPeak = peakLimitLinear / peak
+  if (gain > maxGainForPeak) gain = maxGainForPeak // пик-лимит побеждает — см. докстринг выше
+
+  if (!Number.isFinite(gain) || gain <= 0) return samples
+  if (Math.abs(gain - 1) < 0.01) return samples // уже достаточно близко — не тратим на копирование
+
+  const out = new Int16Array(samples.length)
+  for (let i = 0; i < samples.length; i++) {
+    // Клампим на всякий случай (defensive) — основная защита от клиппинга уже в maxGainForPeak выше.
+    out[i] = Math.max(-32768, Math.min(32767, Math.round(samples[i] * gain)))
+  }
+  return out
+}

@@ -96,6 +96,31 @@ describe('GenerationQueue', () => {
     expect([...provider.calls].sort()).toEqual(['es-p1', 'es-p2', 'ru-p1', 'ru-p2'].sort())
   })
 
+  it('v1.2 (D-23): normalizationNote провайдера (ElevenLabs+ffmpeg) попадает в logLine live-прогресса', async () => {
+    const tasks = [makeTask(dir, 'p1')]
+    const note = 'Громкость нормализована (ffmpeg loudnorm, EBU R128 I=-18 LUFS).'
+    const provider: TTSProvider = {
+      id: 'elevenlabs',
+      listVoices: async () => [],
+      listModels: async () => [],
+      synthesize: async (params) => ({
+        audio: Buffer.from(`mp3:${params.text}`),
+        durationMs: 42,
+        characters: params.text.length,
+        normalizationNote: note
+      })
+    }
+    const queue = new GenerationQueue(tasks, CONFIG, provider, CTX)
+    const logLines: string[] = []
+    queue.on('progress', (event) => {
+      if (event.logLine) logLines.push(event.logLine)
+    })
+    await queue.start()
+
+    expect(tasks[0].status).toBe('done')
+    expect(logLines.some((l) => l.includes('готово') && l.includes(note))).toBe(true)
+  })
+
   it('уважает concurrency — не запускает больше задач одновременно, чем настроено', async () => {
     const tasks = Array.from({ length: 6 }, (_, i) => makeTask(dir, `p${i}`))
     const provider = new FakeProvider({ delayMs: 15 })

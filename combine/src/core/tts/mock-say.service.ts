@@ -7,7 +7,7 @@ import type { TTSProvider, TtsModel, TtsSynthesizeParams, TtsSynthesizeResult, T
 import { TtsError } from './tts-provider'
 import type { MockLang, ResolvedMockVoice, SystemVoice } from './say-voices'
 import { parseSayVoiceList, pickVoiceForLang } from './say-voices'
-import { parseWav, encodePcmToMp3, pcmDurationMs } from '../util/wav-mp3'
+import { parseWav, encodePcmToMp3, normalizePcmRms, pcmDurationMs } from '../util/wav-mp3'
 
 const execFileAsync = promisify(execFileCb)
 
@@ -18,6 +18,12 @@ export interface MockSayServiceOptions {
   sampleRate?: number
   /** Битрейт MP3-кодирования. */
   kbps?: number
+  /**
+   * v1.2 (D-23): RMS-нормализация громкости перед кодированием в MP3 (AppSettings.normalizeAudio).
+   * По умолчанию true — для mock_say нормализация бесплатна (чистый JS, без внешних зависимостей)
+   * и не имеет режима отказа, поэтому включена всегда, пока настройка в целом не выключена явно.
+   */
+  normalize?: boolean
 }
 
 async function defaultListVoicesRaw(): Promise<string> {
@@ -97,8 +103,11 @@ export class MockSayService implements TTSProvider {
       }
       const wavBuf = await readFile(wavPath)
       const { samples, sampleRate: actualRate } = parseWav(wavBuf)
-      const audio = await encodePcmToMp3(samples, actualRate, kbps)
-      const durationMs = pcmDurationMs(samples, actualRate)
+      // v1.2 (D-23): RMS-нормализация ДО кодирования в MP3 — см. докстринг normalizePcmRms
+      // (целевой уровень ~-20 dBFS RMS, пик-лимит -1 dBFS, тишина не усиливается).
+      const normalized = this.options.normalize === false ? samples : normalizePcmRms(samples)
+      const audio = await encodePcmToMp3(normalized, actualRate, kbps)
+      const durationMs = pcmDurationMs(normalized, actualRate)
       return { audio, durationMs, characters: params.text.length }
     } finally {
       await rm(dir, { recursive: true, force: true }).catch(() => undefined)
