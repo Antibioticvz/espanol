@@ -145,12 +145,24 @@
     "block": {
       "type": "object",
       "required": ["block_id", "type", "title_ru", "order_index"],
+      "additionalProperties": false,
       "properties": {
         "block_id": { "type": "string", "pattern": "^b[0-9]+$" },
         "type": { "type": "string", "enum": ["verb_group", "phrase_group", "vocabulary", "story"] },
         "title_ru": { "type": "string" },
         "title_es": { "type": ["string", "null"] },
-        "order_index": { "type": "integer", "minimum": 0 }
+        "order_index": { "type": "integer", "minimum": 0 },
+        "groups": { "type": "array", "items": { "$ref": "#/definitions/group" } },
+        "words": { "type": "array", "items": { "$ref": "#/definitions/phrase" } },
+        "text_es": { "type": "string" },
+        "text_ru": { "type": "string" },
+        "audio": { "$ref": "#/definitions/audio_pair" },
+        "duration_ms": { "$ref": "#/definitions/duration_pair" },
+        "status": { "$ref": "#/definitions/status" },
+        "split_by_phrase": { "type": "boolean" },
+        "id3_tags_written": { "type": "boolean" },
+        "generated_at": { "type": ["string", "null"], "format": "date-time" },
+        "error": { "type": ["string", "null"] }
       },
       "allOf": [
         {
