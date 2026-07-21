@@ -32,7 +32,7 @@ cd combine
 npm install
 npm run dev        # Electron в dev-режиме
 npm test           # vitest (без сетевых вызовов)
-npm run cli -- generate --input ../shared/sample-lessons/topic-04.txt --provider mock_say
+npm run cli -- generate --input ../shared/sample-lessons/topic-04.txt --provider mock_say --out ~/lessons --export-zip
 ```
 
 Без API-ключа ElevenLabs приложение работает в **mock-режиме** (речь синтезирует macOS `say` — бесплатно,

@@ -114,7 +114,8 @@ npm run cli -- export-anki --lesson ~/lessons/02-gotovka-i-kuhnya
 ```
 
 Опции `generate`: `--concurrency`, `--max-retries`, `--delay-ms`, `--timeout-ms`, `--stability`,
-`--similarity-boost`, `--seed`, `--no-id3`. Повторный запуск `generate` с тем же `--out` резюмирует
+`--similarity-boost`, `--seed`, `--no-id3`, `--no-normalize` (выключить нормализацию громкости,
+включена по умолчанию — см. «Новое в 1.2» выше). Повторный запуск `generate` с тем же `--out` резюмирует
 существующий урок (обрабатывает только `pending`/`failed` — идемпотентно, готовые файлы не
 пересоздаются). `Ctrl+C` во время генерации сохраняет прогресс перед выходом.
 
