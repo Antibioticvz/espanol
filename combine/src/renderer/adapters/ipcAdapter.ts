@@ -21,6 +21,9 @@ export const ipcAdapter: CombineIpcApi = {
   parseText: (raw) => bridge().parseText(raw),
   getSettings: () => bridge().getSettings(),
   saveSettings: (settings) => bridge().saveSettings(settings),
+  saveApiKey: (apiKey) => bridge().saveApiKey(apiKey),
+  getApiKeyStatus: () => bridge().getApiKeyStatus(),
+  clearApiKey: () => bridge().clearApiKey(),
   testConnection: (input) => bridge().testConnection(input),
   listVoices: (input) => bridge().listVoices(input),
   estimateCost: (input) => bridge().estimateCost(input),
@@ -37,5 +40,6 @@ export const ipcAdapter: CombineIpcApi = {
   openLessonFolder: (input) => bridge().openLessonFolder(input),
   testSnippet: (input) => bridge().testSnippet(input),
   getPhraseAudio: (input) => bridge().getPhraseAudio(input),
-  exportAnki: (input) => bridge().exportAnki(input)
+  exportAnki: (input) => bridge().exportAnki(input),
+  checkFfmpegAvailable: () => bridge().checkFfmpegAvailable()
 }

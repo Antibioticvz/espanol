@@ -73,6 +73,41 @@ describe('preload/index.ts — window.combineApi поверх window.combine (D-
     expect(invoke).toHaveBeenCalledWith('combine:settings:save', settings)
   })
 
+  // v1.2 (D-23): персистентность API-ключа — переиспользуют СУЩЕСТВУЮЩИЕ каналы вложенного
+  // window.combine.settings.* (см. src/preload/index.ts) под именами плоского контракта.
+  it('saveApiKey -> существующий канал combine:settings:set-api-key', async () => {
+    invoke.mockResolvedValueOnce(undefined)
+    await combineApi().saveApiKey('sk-new-key')
+    expect(invoke).toHaveBeenCalledWith('combine:settings:set-api-key', 'sk-new-key')
+  })
+
+  it('getApiKeyStatus -> комбинирует combine:settings:api-key-status + combine:settings:is-encryption-available, НИКОГДА не сам ключ', async () => {
+    invoke.mockImplementation((channel: string) => {
+      if (channel === 'combine:settings:api-key-status') return Promise.resolve('ok')
+      if (channel === 'combine:settings:is-encryption-available') return Promise.resolve(true)
+      throw new Error(`неожиданный канал: ${channel}`)
+    })
+    const result = await combineApi().getApiKeyStatus()
+    expect(result).toEqual({ status: 'ok', encryptionAvailable: true })
+    expect(invoke).toHaveBeenCalledWith('combine:settings:api-key-status')
+    expect(invoke).toHaveBeenCalledWith('combine:settings:is-encryption-available')
+    // Форма результата — ТОЛЬКО статус/флаг, ключа в возвращаемом объекте в принципе не может быть.
+    expect(Object.keys(result).sort()).toEqual(['encryptionAvailable', 'status'])
+  })
+
+  it('clearApiKey -> существующий канал combine:settings:clear-api-key', async () => {
+    invoke.mockResolvedValueOnce(undefined)
+    await combineApi().clearApiKey()
+    expect(invoke).toHaveBeenCalledWith('combine:settings:clear-api-key')
+  })
+
+  it('checkFfmpegAvailable -> новый канал combine:api:check-ffmpeg (v1.2, D-23)', async () => {
+    invoke.mockResolvedValueOnce(true)
+    const result = await combineApi().checkFfmpegAvailable()
+    expect(invoke).toHaveBeenCalledWith('combine:api:check-ffmpeg')
+    expect(result).toBe(true)
+  })
+
   it('testConnection -> новый канал combine:api:test-connection с явным apiKey', async () => {
     const input = { provider: 'elevenlabs' as const, apiKey: 'sk-explicit' }
     invoke.mockResolvedValueOnce({ ok: true, message: 'ok', voiceCount: 5 })

@@ -33,6 +33,12 @@ export interface AppSettings {
   pricePerThousandChars: PricingTable
   /** D-05: текст для «Тестовой генерации» на экране настроек */
   testText: string
+  /**
+   * v1.2 (D-23): нормализация громкости фраз. mock_say — RMS-нормализация PCM, всегда (когда
+   * включено) успешна и бесплатна. elevenlabs — ffmpeg loudnorm, только если ffmpeg найден в PATH
+   * (иначе тихо пропускается с предупреждением в лог/UI — см. core/util/ffmpeg.ts). Дефолт true.
+   */
+  normalizeAudio: boolean
 }
 
 export function createDefaultSettings(outputDir: string): AppSettings {
@@ -50,6 +56,7 @@ export function createDefaultSettings(outputDir: string): AppSettings {
     useCache: true,
     verboseLogging: false,
     pricePerThousandChars: { ...DEFAULT_PRICING },
-    testText: DEFAULT_TEST_TEXT
+    testText: DEFAULT_TEST_TEXT,
+    normalizeAudio: true
   }
 }

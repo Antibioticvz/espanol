@@ -14,6 +14,7 @@ import { getCurrentWindow } from './window'
 import { assertKnownOutputRoot, assertSaneOutputRoot } from './path-guard'
 import { buildLibraryEntries, readPhraseAudioDataUrl } from './combine-api-support'
 import { defaultApkgPath, exportLessonToAnki } from '../core/anki/anki-export.service'
+import { isFfmpegAvailable } from '../core/util/ffmpeg'
 import type {
   EstimateCostInput,
   ExportAnkiInput,
@@ -256,7 +257,14 @@ function registerFlatApiHandlers(ctx: ReturnType<typeof getAppContext>): void {
   ipcMain.handle('combine:api:regenerate-all', async (_event, input: GenerationRunRef) => {
     const settings = await ctx.settingsService.load(ctx.defaultOutputDir)
     return generationSession.startRegenerate(
-      { topicId: input.topicId, outputRoot: settings.outputDir, mode: 'all', queueConfig: settings.queue, pricePerThousandChars: settings.pricePerThousandChars },
+      {
+        topicId: input.topicId,
+        outputRoot: settings.outputDir,
+        mode: 'all',
+        queueConfig: settings.queue,
+        pricePerThousandChars: settings.pricePerThousandChars,
+        normalizeAudio: settings.normalizeAudio
+      },
       forwardProgress
     )
   })
@@ -264,7 +272,14 @@ function registerFlatApiHandlers(ctx: ReturnType<typeof getAppContext>): void {
   ipcMain.handle('combine:api:regenerate-failed', async (_event, input: GenerationRunRef) => {
     const settings = await ctx.settingsService.load(ctx.defaultOutputDir)
     return generationSession.startRegenerate(
-      { topicId: input.topicId, outputRoot: settings.outputDir, mode: 'failed', queueConfig: settings.queue, pricePerThousandChars: settings.pricePerThousandChars },
+      {
+        topicId: input.topicId,
+        outputRoot: settings.outputDir,
+        mode: 'failed',
+        queueConfig: settings.queue,
+        pricePerThousandChars: settings.pricePerThousandChars,
+        normalizeAudio: settings.normalizeAudio
+      },
       forwardProgress
     )
   })
@@ -290,13 +305,15 @@ function registerFlatApiHandlers(ctx: ReturnType<typeof getAppContext>): void {
       stability: input.stability,
       similarityBoost: input.similarityBoost,
       pricePerThousandChars: settings.pricePerThousandChars,
-      apiKey: input.apiKey
+      apiKey: input.apiKey,
+      normalize: settings.normalizeAudio
     })
     return {
       audioDataUrl: `data:audio/mpeg;base64,${result.audioBase64}`,
       durationMs: result.durationMs,
       characters: result.characters,
-      costUsd: result.costUsd
+      costUsd: result.costUsd,
+      normalizationNote: result.normalizationNote ?? null
     }
   })
 
@@ -313,4 +330,8 @@ function registerFlatApiHandlers(ctx: ReturnType<typeof getAppContext>): void {
     const destApkg = defaultApkgPath(settings.outputDir, input.topicId)
     return exportLessonToAnki(lesson, lessonDir, destApkg)
   })
+
+  // v1.2 (D-23): экран настроек показывает «нормализация недоступна: установите ffmpeg», когда
+  // это так — renderer сам не может проверить (нет доступа к child_process/PATH).
+  ipcMain.handle('combine:api:check-ffmpeg', () => isFfmpegAvailable())
 }

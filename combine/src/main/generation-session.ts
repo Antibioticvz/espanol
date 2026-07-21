@@ -15,6 +15,7 @@ import { isGroupsBlockJson, type ItemStatus, type LessonJson, type VoiceRef } fr
 import type { ParsedLesson } from '../core/types/parsed-lesson'
 import type { AppSettings } from '../core/types/settings'
 import { CostCalculator } from '../core/cost/cost-calculator'
+import { isFfmpegAvailable } from '../core/util/ffmpeg'
 import { getAppContext } from './services-bootstrap'
 
 export interface StartGenerationParams {
@@ -52,6 +53,16 @@ export interface RegenerateParams {
   mode: 'all' | 'failed'
   queueConfig: QueueConfig
   pricePerThousandChars: Record<string, number>
+  /**
+   * v1.2 (D-23): в отличие от provider/model/voices/stability (см. D-20 — те переиспользуют config
+   * УЖЕ СОХРАНЁННЫЙ в lesson.json, не текущие настройки, чтобы не намешать голоса/модели в одном
+   * уроке), normalizeAudio не влияет на СОДЕРЖИМОЕ аудио одной и той же фразы одинаково при любом
+   * значении переключателя (нормализованный/нет уровень громкости — не другой голос/текст), поэтому
+   * трактуется как параметр очереди (см. docstring у queueConfig/pricePerThousandChars выше) —
+   * берётся из ТЕКУЩИХ настроек, не хранится в схеме lesson.json. По умолчанию true, если не передан
+   * (обратная совместимость вызовов, которые ещё не знают об этом поле).
+   */
+  normalizeAudio?: boolean
 }
 
 function resetItemStatus(item: { status: ItemStatus; error?: string | null }, mode: 'all' | 'failed'): void {
@@ -135,7 +146,7 @@ export class GenerationSession {
   ): Promise<StartGenerationOutcome> {
     const { fileService } = getAppContext()
 
-    const provider = await this.createProvider(settings.provider, settings.queue.maxRetries, apiKey)
+    const provider = await this.createProvider(settings.provider, settings.queue.maxRetries, apiKey, settings.normalizeAudio)
     const { voiceEs, voiceRu } = await this.resolveVoices(provider, settings.voiceEs?.id, settings.voiceRu?.id)
 
     const topicId = lesson.topicId
@@ -161,6 +172,11 @@ export class GenerationSession {
       )
       await fileService.writeLessonJson(outputRoot, topicId, lessonJson)
     }
+
+    // v1.2 (D-23): один раз на весь прогон — не по фразе (см. GenerationQueue#synthesizeLang).
+    // ПОСЛЕ writeLessonJson()/readLessonJson() выше — только тогда гарантирован каталог урока
+    // (appendGenerationLog не создаёт родительские папки сам, см. FileService).
+    await this.logNormalizationStatus(fileService, outputRoot, topicId, provider.id, settings.normalizeAudio)
 
     const pricing = new CostCalculator(settings.pricePerThousandChars)
     this.runQueue({
@@ -200,7 +216,9 @@ export class GenerationSession {
     }
     await fileService.writeLessonJson(params.outputRoot, params.topicId, lessonJson)
 
-    const provider = await this.createProvider(lessonJson.config.provider, params.queueConfig.maxRetries)
+    const normalizeAudio = params.normalizeAudio ?? true
+    const provider = await this.createProvider(lessonJson.config.provider, params.queueConfig.maxRetries, null, normalizeAudio)
+    await this.logNormalizationStatus(fileService, params.outputRoot, params.topicId, provider.id, normalizeAudio)
     const pricing = new CostCalculator(params.pricePerThousandChars)
 
     this.runQueue({
@@ -243,16 +261,46 @@ export class GenerationSession {
   /**
    * explicitApiKey (не пустая строка) побеждает — так работает StartParsedGenerationParams.apiKey
    * (ключ ещё не сохранён, но введён в форме настроек). Иначе — обычный путь: ключ из secure storage.
+   * normalizeAudio по умолчанию true (см. AppSettings.normalizeAudio, D-23).
    */
   private async createProvider(
     providerName: 'mock_say' | 'elevenlabs',
     maxRetries: number,
-    explicitApiKey?: string | null
+    explicitApiKey?: string | null,
+    normalizeAudio = true
   ): Promise<TTSProvider> {
-    if (providerName === 'mock_say') return new MockSayService()
+    if (providerName === 'mock_say') return new MockSayService({ normalize: normalizeAudio })
     const apiKey = explicitApiKey && explicitApiKey.trim().length > 0 ? explicitApiKey : await getAppContext().settingsService.getApiKey()
     if (!apiKey) throw new Error('API-ключ ElevenLabs не задан — откройте настройки и введите ключ.')
-    return new ElevenLabsService({ apiKey, maxRetries })
+    return new ElevenLabsService({ apiKey, maxRetries, normalize: normalizeAudio })
+  }
+
+  /**
+   * v1.2 (D-23): один раз за прогон (не по фразе) — фиксирует в generation.log, будет ли реально
+   * применяться нормализация громкости для этого урока. mock_say с включённой настройкой всегда
+   * успешен (чистый JS) — писать об этом нечего. ElevenLabs зависит от наличия ffmpeg в PATH —
+   * пользователю полезно знать ДО того, как урок сгенерируется, почему фразы вышли (не)нормализованными.
+   */
+  private async logNormalizationStatus(
+    fileService: ReturnType<typeof getAppContext>['fileService'],
+    outputRoot: string,
+    topicId: string,
+    providerId: 'mock_say' | 'elevenlabs',
+    normalizeAudio: boolean
+  ): Promise<void> {
+    if (providerId !== 'elevenlabs') return
+    if (!normalizeAudio) {
+      await fileService.appendGenerationLog(outputRoot, topicId, 'Нормализация громкости выключена в настройках — фразы сохранены как есть.')
+      return
+    }
+    const available = await isFfmpegAvailable()
+    await fileService.appendGenerationLog(
+      outputRoot,
+      topicId,
+      available
+        ? 'Нормализация громкости: ffmpeg найден — применяется loudnorm (EBU R128, I=-18 LUFS) к каждой фразе ElevenLabs.'
+        : 'Нормализация громкости недоступна: ffmpeg не найден в PATH — фразы сохранены без нормализации (установите ffmpeg, напр. `brew install ffmpeg`).'
+    )
   }
 
   private async resolveVoices(

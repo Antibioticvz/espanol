@@ -1,5 +1,6 @@
 import type { TTSProvider, TtsModel, TtsSynthesizeParams, TtsSynthesizeResult, TtsVoice } from './tts-provider'
 import { TtsError } from './tts-provider'
+import { FfmpegLoudnessNormalizer, type LoudnessNormalizer } from '../util/ffmpeg'
 
 /**
  * ElevenLabsService — реальный контракт API ElevenLabs (см. docs.elevenlabs.io и docs/DECISIONS.md D-01/D-02/D-03,
@@ -27,6 +28,10 @@ export interface ElevenLabsServiceOptions {
   /** Таймаут для GET /v1/voices и GET /v1/models (не связан с per-request timeoutMs синтеза). */
   listTimeoutMs?: number
   fetchImpl?: typeof fetch
+  /** v1.2 (D-23): нормализация громкости (AppSettings.normalizeAudio). По умолчанию true. */
+  normalize?: boolean
+  /** Переопределяемо в тестах — по умолчанию реальный ffmpeg (см. core/util/ffmpeg.ts). */
+  normalizer?: LoudnessNormalizer
 }
 
 const DEFAULT_BASE_URL = 'https://api.elevenlabs.io'
@@ -58,6 +63,8 @@ export class ElevenLabsService implements TTSProvider {
   private readonly backoffBaseMs: number
   private readonly listTimeoutMs: number
   private readonly fetchImpl: typeof fetch
+  private readonly normalize: boolean
+  private readonly normalizer: LoudnessNormalizer
 
   constructor(options: ElevenLabsServiceOptions) {
     this.apiKey = options.apiKey
@@ -66,6 +73,8 @@ export class ElevenLabsService implements TTSProvider {
     this.backoffBaseMs = options.backoffBaseMs ?? 1000
     this.listTimeoutMs = options.listTimeoutMs ?? DEFAULT_LIST_TIMEOUT_MS
     this.fetchImpl = options.fetchImpl ?? fetch
+    this.normalize = options.normalize ?? true
+    this.normalizer = options.normalizer ?? new FfmpegLoudnessNormalizer()
   }
 
   private headers(extra?: Record<string, string>): Record<string, string> {
@@ -182,9 +191,38 @@ export class ElevenLabsService implements TTSProvider {
       timeoutMs,
       (res) => res.arrayBuffer()
     )
-    const audio = Buffer.from(arrayBuffer)
+    const rawAudio = Buffer.from(arrayBuffer)
+    const { audio, normalizationNote } = await this.applyNormalization(rawAudio)
     const durationMs = await this.estimateDurationMs(audio)
-    return { audio, durationMs, characters: params.text.length }
+    return { audio, durationMs, characters: params.text.length, normalizationNote }
+  }
+
+  /**
+   * v1.2 (D-23): ElevenLabs отдаёт готовый MP3 (не PCM) — единственный практичный способ
+   * нормализовать громкость уже закодированного файла без чистого JS MP3-декодера — внешний
+   * ffmpeg (this.normalizer, по умолчанию FfmpegLoudnessNormalizer). Best-effort: недоступность
+   * ffmpeg или сбой самой нормализации НЕ проваливают фразу — просто сохраняется исходный уровень
+   * громкости, а причина попадает в normalizationNote (см. GenerationQueue → лог).
+   */
+  private async applyNormalization(rawAudio: Buffer): Promise<{ audio: Buffer; normalizationNote: string | null }> {
+    if (!this.normalize) return { audio: rawAudio, normalizationNote: null }
+    const available = await this.normalizer.isAvailable()
+    if (!available) {
+      return {
+        audio: rawAudio,
+        normalizationNote:
+          '⚠ Нормализация громкости недоступна: ffmpeg не найден в PATH — фраза сохранена без нормализации (установите ffmpeg, напр. `brew install ffmpeg`).'
+      }
+    }
+    try {
+      const normalized = await this.normalizer.normalize(rawAudio)
+      return { audio: normalized, normalizationNote: 'Громкость нормализована (ffmpeg loudnorm, EBU R128 I=-18 LUFS).' }
+    } catch (e) {
+      return {
+        audio: rawAudio,
+        normalizationNote: `⚠ Нормализация громкости не удалась (${e instanceof Error ? e.message : String(e)}) — сохранён исходный уровень.`
+      }
+    }
   }
 
   /** D-13: длительность реальной генерации — из самого MP3 (music-metadata), а не по числу слов. */

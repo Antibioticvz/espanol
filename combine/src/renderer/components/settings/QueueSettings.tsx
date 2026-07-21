@@ -1,4 +1,5 @@
 import type { AppSettings } from '../../../core/types/settings'
+import { useFfmpegAvailableQuery } from '../../hooks/useFfmpeg'
 
 export interface QueueSettingsProps {
   settings: AppSettings
@@ -9,6 +10,11 @@ export interface QueueSettingsProps {
 export function QueueSettings({ settings, onChange }: QueueSettingsProps): JSX.Element {
   const { queue } = settings
   const updateQueue = (patch: Partial<AppSettings['queue']>): void => onChange({ queue: { ...queue, ...patch } })
+
+  // v1.2 (D-23): для mock_say нормализация всегда успешна (чистый JS) — предупреждение о ffmpeg
+  // актуально только когда provider=elevenlabs И настройка включена (иначе ffmpeg не понадобится).
+  const ffmpegRelevant = settings.provider === 'elevenlabs' && settings.normalizeAudio
+  const ffmpegQuery = useFfmpegAvailableQuery(ffmpegRelevant)
 
   return (
     <div className="space-y-4">
@@ -82,6 +88,17 @@ export function QueueSettings({ settings, onChange }: QueueSettingsProps): JSX.E
           checked={settings.verboseLogging}
           onChange={(v) => onChange({ verboseLogging: v })}
         />
+        <Checkbox
+          label="Нормализация громкости фраз"
+          checked={settings.normalizeAudio}
+          onChange={(v) => onChange({ normalizeAudio: v })}
+        />
+        {ffmpegRelevant && ffmpegQuery.data === false && (
+          <p className="field-hint text-amber-600" data-testid="ffmpeg-unavailable-hint">
+            Нормализация недоступна: установите ffmpeg (напр. <code>brew install ffmpeg</code>) — без него фразы
+            ElevenLabs сохраняются без изменения громкости. mock_say нормализуется всегда (не требует ffmpeg).
+          </p>
+        )}
       </div>
     </div>
   )

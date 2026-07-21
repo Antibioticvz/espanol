@@ -18,6 +18,12 @@ export interface TtsSynthesizeResult {
   durationMs: number
   /** Фактически озвученные символы — основа для расчёта реальной стоимости */
   characters: number
+  /**
+   * v1.2 (D-23): заметка о нормализации громкости — ТОЛЬКО когда есть что сообщить (успех/сбой/
+   * недоступность ffmpeg для ElevenLabs). mock_say всегда молча успешна (когда включена) и не
+   * заполняет это поле — см. GenerationQueue, которая при наличии превращает это в лог-строку.
+   */
+  normalizationNote?: string | null
 }
 
 export interface TtsVoice {

@@ -8,6 +8,7 @@ import type { LessonSummary } from '../core/file/file.service'
 import type { TestGenerationParams, TestGenerationResult } from '../main/test-generation'
 import type { ApiKeyStatus } from '../core/settings/settings.service'
 import type {
+  ApiKeyStatusResult,
   CombineIpcApi,
   EstimateCostInput,
   EstimateCostResult,
@@ -114,6 +115,19 @@ const combineApi: CombineIpcApi = {
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('combine:settings:get'),
   saveSettings: (settings: AppSettings): Promise<void> => ipcRenderer.invoke('combine:settings:save', settings),
 
+  // v1.2 (D-23): персистентность API-ключа — переиспользуют СУЩЕСТВУЮЩИЕ каналы вложенного
+  // window.combine.settings.* (тот же SettingsService/safeStorage), просто под именами плоского
+  // контракта. Ключ никогда не возвращается обратно в renderer — только статус (см. shared/ipc.ts).
+  saveApiKey: (apiKey: string): Promise<void> => ipcRenderer.invoke('combine:settings:set-api-key', apiKey),
+  getApiKeyStatus: async (): Promise<ApiKeyStatusResult> => {
+    const [status, encryptionAvailable] = await Promise.all([
+      ipcRenderer.invoke('combine:settings:api-key-status'),
+      ipcRenderer.invoke('combine:settings:is-encryption-available')
+    ])
+    return { status, encryptionAvailable }
+  },
+  clearApiKey: (): Promise<void> => ipcRenderer.invoke('combine:settings:clear-api-key'),
+
   testConnection: (input: TestConnectionInput): Promise<TestConnectionResult> =>
     ipcRenderer.invoke('combine:api:test-connection', input),
   listVoices: (input: ListVoicesInput): Promise<VoiceOption[]> => ipcRenderer.invoke('combine:api:list-voices', input),
@@ -146,7 +160,10 @@ const combineApi: CombineIpcApi = {
     ipcRenderer.invoke('combine:api:get-phrase-audio', input),
 
   /** v1.1 — экспорт урока в Anki .apkg (см. docs/SPEC_COMBINE.md доп. + core/anki/anki-export.service.ts). */
-  exportAnki: (input: ExportAnkiInput): Promise<ExportAnkiResult> => ipcRenderer.invoke('combine:api:export-anki', input)
+  exportAnki: (input: ExportAnkiInput): Promise<ExportAnkiResult> => ipcRenderer.invoke('combine:api:export-anki', input),
+
+  /** v1.2 (D-23) — см. core/util/ffmpeg.ts. */
+  checkFfmpegAvailable: (): Promise<boolean> => ipcRenderer.invoke('combine:api:check-ffmpeg')
 }
 
 contextBridge.exposeInMainWorld('combineApi', combineApi)
