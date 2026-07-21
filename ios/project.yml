@@ -28,6 +28,7 @@ targets:
     platform: iOS
     sources:
       - path: AudioLearner
+      - path: Shared
     dependencies:
       - package: ZIPFoundation
       - target: AudioLearnerWidgetExtension
@@ -49,6 +50,7 @@ targets:
     platform: iOS
     sources:
       - path: AudioLearnerWidget
+      - path: Shared
     settings:
       base:
         INFOPLIST_FILE: AudioLearnerWidget/Info.plist
