@@ -79,6 +79,16 @@ export class ElevenLabsService implements TTSProvider {
    * TtsError(kind:'timeout')). Также используется для listVoices/listModels (ранее без таймаута
    * вообще — зависшая сеть вешала промис навсегда).
    */
+  /**
+   * ВАЖНО (issue #12 второго ревью): fetch() самого запроса и чтение тела ответа классифицируются
+   * ОТДЕЛЬНО. Раньше единый try/catch заворачивал ЛЮБУЮ ошибку (включая программные — битый JSON,
+   * баг в readBody) в TtsError(kind:'network', retryable:true) — это обесценивало правило "не-TtsError
+   * не ретраить" из withRetry(): непредвиденная ошибка парсинга тихо ретраилась 1s/2s/4s наравне
+   * с реальным сбоем сети, маскируя баг под "временную проблему". Теперь: сбой САМОГО fetch()
+   * (до получения ответа) — сеть/таймаут, retryable:true, как и раньше; сбой ЧТЕНИЯ ТЕЛА
+   * ПОСЛЕ успешного res.ok — если это abort (таймаут мог сработать и во время стриминга тела),
+   * тоже 'timeout'; любая ДРУГАЯ ошибка на этом этапе — 'unknown', retryable:false.
+   */
   private async fetchAndRead<T>(
     url: string,
     init: RequestInit,
@@ -88,15 +98,30 @@ export class ElevenLabsService implements TTSProvider {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
-      const res = await this.fetchImpl(url, { ...init, signal: controller.signal })
-      if (!res.ok) throw await this.toError(res)
-      return await readBody(res)
-    } catch (e) {
-      if (e instanceof TtsError) throw e
-      if (e instanceof Error && e.name === 'AbortError') {
-        throw new TtsError(`Таймаут запроса (${timeoutMs} мс)`, 'timeout', undefined, true)
+      let res: Response
+      try {
+        res = await this.fetchImpl(url, { ...init, signal: controller.signal })
+      } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') {
+          throw new TtsError(`Таймаут запроса (${timeoutMs} мс)`, 'timeout', undefined, true)
+        }
+        throw new TtsError(`Сетевая ошибка запроса: ${e instanceof Error ? e.message : String(e)}`, 'network', undefined, true)
       }
-      throw new TtsError(`Сетевая ошибка запроса: ${e instanceof Error ? e.message : String(e)}`, 'network', undefined, true)
+      if (!res.ok) throw await this.toError(res)
+      try {
+        return await readBody(res)
+      } catch (e) {
+        if (e instanceof TtsError) throw e
+        if (e instanceof Error && e.name === 'AbortError') {
+          throw new TtsError(`Таймаут запроса (${timeoutMs} мс)`, 'timeout', undefined, true)
+        }
+        throw new TtsError(
+          `Не удалось разобрать ответ ElevenLabs: ${e instanceof Error ? e.message : String(e)}`,
+          'unknown',
+          undefined,
+          false
+        )
+      }
     } finally {
       clearTimeout(timer)
     }

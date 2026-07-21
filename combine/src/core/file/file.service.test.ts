@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, writeFile, mkdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -222,5 +222,26 @@ describe('FileService', () => {
   it('защита от directory traversal — некорректный topic_id отклоняется до любых fs-операций', () => {
     expect(() => service.lessonDir(outputRoot, '../../etc')).toThrow()
     expect(() => service.lessonDir(outputRoot, '01-ok/../../../etc')).toThrow()
+  })
+
+  it('РЕГРЕССИЯ: writeLessonJson атомарна — много конкурентных записей не оставляют битый JSON и не оставляют временных файлов', async () => {
+    const base = validLesson()
+    // 20 конкурентных записей той же фразы с разным title_ru — имитирует несколько progress-событий
+    // GenerationQueue, персистящихся "одновременно" (fire-and-forget) без сериализации на вызывающей стороне.
+    const writes = Array.from({ length: 20 }, (_, i) =>
+      service.writeLessonJson(outputRoot, base.topic_id, { ...base, title_ru: `Версия ${i}` })
+    )
+    await Promise.all(writes)
+
+    const raw = await readFile(service.lessonJsonPath(outputRoot, base.topic_id), 'utf8')
+    // Файл должен быть ПОЛНОСТЬЮ валидным JSON (не обрублен посреди записи) — если бы запись была
+    // не атомарной, конкурентные writeFile() в один и тот же путь могли бы перемежать байты двух
+    // разных сериализаций и дать невалидный JSON.
+    const parsed = JSON.parse(raw) as LessonJson
+    expect(parsed.title_ru).toMatch(/^Версия \d+$/)
+
+    // Никаких недоубранных .lesson.json.tmp-* после завершения всех записей.
+    const dirEntries = await readdir(service.lessonDir(outputRoot, base.topic_id))
+    expect(dirEntries.filter((f) => f.includes('.tmp-'))).toEqual([])
   })
 })

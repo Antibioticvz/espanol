@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { dialog, ipcMain, shell } from 'electron'
 import { ParserService } from '../core/parser/parser.service'
 import { MockSayService } from '../core/tts/mock-say.service'
 import { ElevenLabsService } from '../core/tts/eleven-labs.service'
@@ -8,18 +8,24 @@ import type { QueueConfig } from '../core/types/generation'
 import { getAppContext } from './services-bootstrap'
 import { generationSession } from './generation-session'
 import { runTestGeneration, type TestGenerationParams } from './test-generation'
+import { getCurrentWindow } from './window'
+import { assertKnownOutputRoot, assertSaneOutputRoot } from './path-guard'
 
 /**
- * Регистрирует все IPC-хендлеры main-процесса. Имена каналов ниже — рабочий вариант этого
- * агента; финальную стыковку с renderer (который строится параллельно в ветке feat/combine-ui,
- * см. коммит-сообщения) делает оркестратор при merge — сознательно не пытаемся угадать точные
- * имена оттуda.
+ * Регистрирует все IPC-хендлеры main-процесса. Вызывается РОВНО ОДИН РАЗ за жизнь процесса (см.
+ * index.ts) — ipcMain.handle бросает при повторной регистрации того же канала, поэтому это НЕ
+ * привязано к конкретному BrowserWindow: где нужно окно (прогресс-события, dialog), берём его
+ * динамически через window.ts#getCurrentWindow() (issue #5 второго ревью).
+ *
+ * Имена каналов ниже — рабочий вариант этого агента; финальную стыковку с renderer (который
+ * строится параллельно в ветке feat/combine-ui) делает оркестратор при merge — сознательно не
+ * пытаемся угадать точные имена оттуда.
  *
  * Операции: parseText, settings (get/save/api-key/test-connection), voices/models, testGenerate
  * (D-05 «Тестовая генерация»), generation (start/pause/resume/cancel + прогресс-события),
  * library (list/delete/export/regenerate/open-in-finder), выбор файлов/папок через dialog.
  */
-export function registerIpcHandlers(mainWindow: BrowserWindow): void {
+export function registerIpcHandlers(): void {
   const ctx = getAppContext()
 
   ipcMain.handle('combine:parse-text', (_event, text: string) => {
@@ -36,6 +42,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle('combine:settings:has-api-key', async () => {
     return ctx.settingsService.hasApiKey()
+  })
+
+  // issue #10: статус детальнее булева hasApiKey() — UI может показать "ключ повреждён,
+  // введите заново" вместо неотличимого от "ключа нет" состояния.
+  ipcMain.handle('combine:settings:api-key-status', async () => {
+    return ctx.settingsService.getApiKeyStatus()
   })
 
   ipcMain.handle('combine:settings:is-encryption-available', () => {
@@ -79,8 +91,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   })
 
   ipcMain.handle('combine:generation:start', async (_event, params: { inputText: string; settings: AppSettings }) => {
+    // Лёгкая защита (не строгое совпадение с сохранёнными настройками — здесь легитимно писать
+    // в ЕЩЁ НЕ сохранённую папку, которую пользователь только что выбрал/поменял в UI перед тем,
+    // как нажать «Сгенерировать»): просто отвергаем катастрофически широкие корни.
+    assertSaneOutputRoot(params.settings.outputDir)
     return generationSession.start(params, (progress) => {
-      mainWindow.webContents.send('combine:generation:progress', progress)
+      getCurrentWindow()?.webContents.send('combine:generation:progress', progress)
     })
   })
 
@@ -90,8 +106,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       _event,
       params: { topicId: string; outputRoot: string; mode: 'all' | 'failed'; queueConfig: QueueConfig; pricePerThousandChars: Record<string, number> }
     ) => {
-      await generationSession.startRegenerate(params, (progress) => {
-        mainWindow.webContents.send('combine:generation:progress', progress)
+      const settings = await ctx.settingsService.load(ctx.defaultOutputDir)
+      const outputRoot = assertKnownOutputRoot(params.outputRoot, settings.outputDir)
+      await generationSession.startRegenerate({ ...params, outputRoot }, (progress) => {
+        getCurrentWindow()?.webContents.send('combine:generation:progress', progress)
       })
     }
   )
@@ -102,33 +120,46 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('combine:generation:is-active', () => generationSession.isActive())
 
   ipcMain.handle('combine:library:list', async (_event, outputRoot: string) => {
-    return ctx.fileService.listLessons(outputRoot)
+    const settings = await ctx.settingsService.load(ctx.defaultOutputDir)
+    const confined = assertKnownOutputRoot(outputRoot, settings.outputDir)
+    return ctx.fileService.listLessons(confined)
   })
 
   ipcMain.handle('combine:library:delete', async (_event, params: { outputRoot: string; topicId: string }) => {
-    await ctx.fileService.deleteLesson(params.outputRoot, params.topicId)
+    const settings = await ctx.settingsService.load(ctx.defaultOutputDir)
+    const outputRoot = assertKnownOutputRoot(params.outputRoot, settings.outputDir)
+    await ctx.fileService.deleteLesson(outputRoot, params.topicId)
   })
 
   ipcMain.handle('combine:library:export-zip', async (_event, params: { outputRoot: string; topicId: string }) => {
-    const zipPath = ctx.fileService.defaultZipPath(params.outputRoot, params.topicId)
-    await ctx.fileService.exportZip(params.outputRoot, params.topicId, zipPath)
+    const settings = await ctx.settingsService.load(ctx.defaultOutputDir)
+    const outputRoot = assertKnownOutputRoot(params.outputRoot, settings.outputDir)
+    const zipPath = ctx.fileService.defaultZipPath(outputRoot, params.topicId)
+    await ctx.fileService.exportZip(outputRoot, params.topicId, zipPath)
     return { zipPath }
   })
 
-  ipcMain.handle('combine:library:open-in-finder', (_event, params: { outputRoot: string; topicId: string }) => {
-    shell.showItemInFolder(ctx.fileService.lessonDir(params.outputRoot, params.topicId))
+  ipcMain.handle('combine:library:open-in-finder', async (_event, params: { outputRoot: string; topicId: string }) => {
+    const settings = await ctx.settingsService.load(ctx.defaultOutputDir)
+    const outputRoot = assertKnownOutputRoot(params.outputRoot, settings.outputDir)
+    shell.showItemInFolder(ctx.fileService.lessonDir(outputRoot, params.topicId))
   })
 
   ipcMain.handle('combine:pick-output-dir', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory', 'createDirectory'] })
+    const win = getCurrentWindow()
+    const result = win
+      ? await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] })
+      : await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] })
     return result.canceled ? null : result.filePaths[0]
   })
 
   ipcMain.handle('combine:pick-input-file', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
+    const win = getCurrentWindow()
+    const options: Electron.OpenDialogOptions = {
       properties: ['openFile'],
       filters: [{ name: 'Текст урока', extensions: ['txt', 'md'] }]
-    })
+    }
+    const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
     return result.canceled ? null : result.filePaths[0]
   })
 }

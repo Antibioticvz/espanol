@@ -281,3 +281,32 @@ export function markId3Written(lessonJson: LessonJson, task: GenerationTask): vo
   }
   phrase.id3_tags_written = true
 }
+
+/**
+ * Сумма символов (es.length + ru.length) по ВСЕМ элементам lesson.json со статусом done —
+ * основа для actual_cost_usd. ВАЖНО (координатор, issue #8): считаем по ВСЕМУ lessonJson, а не
+ * только по GenerationTask текущей сессии — flattenToTasks() намеренно исключает уже done
+ * элементы (идемпотентность резюме, см. D-16), поэтому сумма по одним лишь "новым" tasks
+ * занижает фактическую стоимость всего урока при резюме частично готового урока. Схема не хранит
+ * отдельное поле "characters" на фразу, поэтому пересчитываем из самого текста — ровно то, что
+ * было отправлено провайдеру на синтез.
+ */
+export function sumCharactersForDoneItems(lessonJson: LessonJson): number {
+  let total = 0
+  for (const block of lessonJson.blocks) {
+    if (isGroupsBlockJson(block)) {
+      for (const group of block.groups) {
+        for (const phrase of group.phrases) {
+          if (phrase.status === 'done') total += phrase.es.length + phrase.ru.length
+        }
+      }
+    } else if (block.type === 'vocabulary') {
+      for (const word of block.words) {
+        if (word.status === 'done') total += word.es.length + word.ru.length
+      }
+    } else if (block.status === 'done') {
+      total += block.text_es.length + block.text_ru.length
+    }
+  }
+  return total
+}

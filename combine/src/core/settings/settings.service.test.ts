@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Encryptor } from './encryptor'
@@ -76,6 +77,17 @@ describe('SettingsService', () => {
     expect(settings.provider).toBe('mock_say')
   })
 
+  it('РЕГРЕССИЯ: повреждённый settings.json переименовывается в .bak, а не исчезает молча', async () => {
+    const settingsPath = join(userDataDir, 'settings.json')
+    await writeFile(settingsPath, '{ битый json', 'utf8')
+    const service = new SettingsService(userDataDir, new FakeEncryptor())
+    await service.load(outputDir)
+
+    expect(existsSync(settingsPath)).toBe(false) // исходный файл переименован, не удалён и не перезаписан
+    const backup = await readFile(`${settingsPath}.bak`, 'utf8')
+    expect(backup).toBe('{ битый json')
+  })
+
   it('API-ключ: setApiKey/getApiKey проходят через Encryptor и НЕ хранятся в открытом виде', async () => {
     const service = new SettingsService(userDataDir, new FakeEncryptor())
     expect(await service.hasApiKey()).toBe(false)
@@ -102,6 +114,47 @@ describe('SettingsService', () => {
     const service = new SettingsService(userDataDir, new UnavailableEncryptor())
     await expect(service.setApiKey('sk-x')).rejects.toThrow(/[Шш]ифрование/)
     expect(service.isEncryptionAvailable()).toBe(false)
+  })
+
+  describe('getApiKeyStatus() — согласованность с hasApiKey()/getApiKey() (issue #10)', () => {
+    it('"none" — файла ключа нет', async () => {
+      const service = new SettingsService(userDataDir, new FakeEncryptor())
+      expect(await service.getApiKeyStatus()).toBe('none')
+      expect(await service.hasApiKey()).toBe(false)
+    })
+
+    it('"ok" — ключ есть и расшифровывается', async () => {
+      const service = new SettingsService(userDataDir, new FakeEncryptor())
+      await service.setApiKey('sk-good')
+      expect(await service.getApiKeyStatus()).toBe('ok')
+      expect(await service.hasApiKey()).toBe(true)
+      expect(await service.getApiKey()).toBe('sk-good')
+    })
+
+    it('РЕГРЕССИЯ: "corrupted" — файл есть, но не расшифровывается; hasApiKey() теперь СОГЛАСОВАНА с getApiKey()==null (раньше hasApiKey()==true вводила UI в заблуждение)', async () => {
+      const throwingEncryptor: Encryptor = {
+        isAvailable: () => true,
+        encryptToString: (s) => s,
+        decryptFromString: () => {
+          throw new Error('не удалось расшифровать (напр. другая машина/учётка)')
+        }
+      }
+      const service = new SettingsService(userDataDir, throwingEncryptor)
+      await writeFile(join(userDataDir, 'api-key.enc'), 'что-то-нерасшифровываемое', 'utf8')
+
+      expect(await service.getApiKeyStatus()).toBe('corrupted')
+      expect(await service.getApiKey()).toBeNull()
+      // Ключевая проверка регрессии: hasApiKey() больше не врёт "ключ есть" в этом случае.
+      expect(await service.hasApiKey()).toBe(false)
+    })
+
+    it('"encryption-unavailable" — файл есть, но шифрование сейчас недоступно', async () => {
+      const service = new SettingsService(userDataDir, new FakeEncryptor())
+      await service.setApiKey('sk-good')
+      const unavailableService = new SettingsService(userDataDir, new UnavailableEncryptor())
+      expect(await unavailableService.getApiKeyStatus()).toBe('encryption-unavailable')
+      expect(await unavailableService.hasApiKey()).toBe(false)
+    })
   })
 
   it('userDataDir создаётся автоматически при save()/setApiKey(), даже если ещё не существует', async () => {

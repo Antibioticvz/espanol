@@ -2,7 +2,13 @@ import { ParserService, computeStats } from '../core/parser/parser.service'
 import { MockSayService } from '../core/tts/mock-say.service'
 import { ElevenLabsService } from '../core/tts/eleven-labs.service'
 import type { TTSProvider } from '../core/tts/tts-provider'
-import { applyTaskResult, buildLessonSkeleton, flattenToTasks, markId3Written } from '../core/queue/build-items'
+import {
+  applyTaskResult,
+  buildLessonSkeleton,
+  flattenToTasks,
+  markId3Written,
+  sumCharactersForDoneItems
+} from '../core/queue/build-items'
 import { GenerationQueue } from '../core/queue/generation-queue'
 import type { GenerationProgressEvent, GenerationTask, QueueConfig } from '../core/types/generation'
 import { isGroupsBlockJson, type ItemStatus, type LessonJson, type VoiceRef } from '../core/types/lesson-json'
@@ -36,6 +42,20 @@ function resetItemStatus(item: { status: ItemStatus; error?: string | null }, mo
  * см. §4.3 спеки). IPC-хендлеры (ipc-handlers.ts) дергают start/startRegenerate/pause/resume/
  * cancel; прогресс идёт через onProgress-колбэк, который хендлер форвардит в renderer
  * (имя канала/событие — на усмотрение UI-агента при стыковке, см. коммент координатора).
+ *
+ * Второй раунд ревью (Opus) нашёл три взаимосвязанных бага здесь, все исправлены:
+ *  - finalize() был навешан на .then() ПЕРВОГО queue.start() — срабатывал преждевременно при
+ *    pause (queue.start() резолвится, когда p-queue становится idle, что происходит и при паузе,
+ *    не только при истинном завершении) и НЕ срабатывал вовсе после resume() (новый queue.start()
+ *    внутри resume() — отдельный промис, не связанный с тем .then()). Теперь finalize() триггерится
+ *    строго по фактическому событию `runState === 'done'` из очереди — оно эмитится ровно один раз,
+ *    какими бы ни были промежуточные pause/resume.
+ *  - start()/startRegenerate() не проверяли isActive(): второй вызов подряд молча перезаписывал
+ *    queue/lessonJson/tasks этого объекта, а СТАРАЯ очередь при этом продолжала крутиться в фоне
+ *    и постоянно персистить уже подменённые (новые) this.tasks поверх lesson.json СТАРОГО урока —
+ *    перекрёстная порча. Теперь оба метода бросают, если isActive().
+ *  - isActive() никогда не возвращала false обратно (queue не обнулялся) — теперь finalize()
+ *    (в finally, чтобы отработало и при ошибке записи) обнуляет this.queue.
  */
 class GenerationSession {
   private queue: GenerationQueue | null = null
@@ -44,6 +64,8 @@ class GenerationSession {
   private topicId: string | null = null
   private outputRoot: string | null = null
   private addId3 = true
+  /** Сериализует все writeLessonJson() этого сеанса — см. класс-докстринг и docstring persist(). */
+  private persistChain: Promise<void> = Promise.resolve()
 
   isActive(): boolean {
     return this.queue !== null
@@ -55,8 +77,11 @@ class GenerationSession {
 
   /** Новая генерация из сырого текста (импорт) — резюмирует, если lesson.json для topic_id уже есть. */
   async start(params: StartGenerationParams, onProgress: (event: GenerationProgressEvent) => void): Promise<{ topicId: string }> {
+    if (this.isActive()) {
+      throw new Error('Генерация уже выполняется — дождитесь завершения, поставьте на паузу или отмените текущую.')
+    }
     const { settings } = params
-    const { fileService, settingsService } = getAppContext()
+    const { fileService } = getAppContext()
 
     const parseResult = new ParserService().parse(params.inputText)
     if (!parseResult.lesson || parseResult.errors.length > 0) {
@@ -110,6 +135,9 @@ class GenerationSession {
 
   /** «Переделать всё» / «Переделать only failed» из библиотеки — использует config уже сохранённый в lesson.json. */
   async startRegenerate(params: RegenerateParams, onProgress: (event: GenerationProgressEvent) => void): Promise<void> {
+    if (this.isActive()) {
+      throw new Error('Генерация уже выполняется — дождитесь завершения, поставьте на паузу или отмените текущую.')
+    }
     const { fileService } = getAppContext()
     const lessonJson = await fileService.readLessonJson(params.outputRoot, params.topicId)
 
@@ -144,8 +172,18 @@ class GenerationSession {
     this.queue?.pause()
   }
 
-  async resume(): Promise<void> {
-    await this.queue?.resume()
+  /**
+   * НЕ ждём завершения всей (оставшейся) генерации — раньше resume() был `await this.queue.resume()`,
+   * а GenerationQueue.resume() сам делает `await this.start()`, который резолвится только когда
+   * очередь ЦЕЛИКОМ опустеет (queue.onIdle()). Поскольку IPC-хендлер, в свою очередь, await'ит
+   * generationSession.resume(), весь вызов `ipcRenderer.invoke('combine:generation:resume')`
+   * зависал в renderer на всё оставшееся время генерации (реально — минуты). Возобновление должно
+   * лишь ЗАПУСТИТЬ работу в фоне и сразу же вернуть управление — как и start()/startRegenerate().
+   */
+  resume(): void {
+    this.queue?.resume().catch((e: unknown) => {
+      console.warn(`[GenerationSession] Ошибка при возобновлении: ${e instanceof Error ? e.message : String(e)}`)
+    })
   }
 
   cancel(): void {
@@ -232,13 +270,33 @@ class GenerationSession {
       if (event.item && !event.item.lang && (event.item.status === 'done' || event.item.status === 'failed')) {
         void this.persist()
       }
+      // Именно ЭТО, а не .then() исходного queue.start() — единственный надёжный триггер финализации:
+      // эмитится ровно один раз при истинном завершении, переживает любое число pause()/resume().
+      if (event.runState === 'done') {
+        void this.finalize(args.pricing, startedAt)
+      }
     })
 
-    // Не await — управление возвращается сразу, генерация продолжается в фоне.
-    void this.queue.start().then(() => this.finalize(args.pricing, startedAt))
+    // Не await — управление возвращается сразу, генерация продолжается в фоне; на непредвиденный
+    // reject (сам GenerationQueue такого не бросает, но защищаемся от регрессий) — просто логируем.
+    this.queue.start().catch((e: unknown) => {
+      console.warn(`[GenerationSession] queue.start() завершился с ошибкой: ${e instanceof Error ? e.message : String(e)}`)
+    })
   }
 
-  private async persist(): Promise<void> {
+  /**
+   * Персист текущего состояния lesson.json. Вызовы СЕРИАЛИЗОВАНЫ через persistChain — GenerationQueue
+   * эмитит progress-события по мере завершения КАЖДОЙ задачи, и без сериализации несколько
+   * fire-and-forget persist() могли бы одновременно читать/писать один this.lessonJson и гонять
+   * конкурентные writeLessonJson() (которая сама по себе атомарна — temp+rename, см. FileService,
+   * но порядок применения "какая версия легла последней" всё равно нуждается в дисциплине вызова).
+   */
+  private persist(): Promise<void> {
+    this.persistChain = this.persistChain.then(() => this.doPersist())
+    return this.persistChain
+  }
+
+  private async doPersist(): Promise<void> {
     if (!this.lessonJson || !this.outputRoot || !this.topicId) return
     for (const t of this.tasks) {
       applyTaskResult(this.lessonJson, t)
@@ -252,15 +310,28 @@ class GenerationSession {
   }
 
   private async finalize(pricing: CostCalculator, startedAt: number): Promise<void> {
-    if (!this.lessonJson || !this.outputRoot || !this.topicId) return
-    await this.persist()
-    const totalCharacters = this.tasks.reduce((sum, t) => sum + (t.esCharacters ?? 0) + (t.ruCharacters ?? 0), 0)
-    const { fileService } = getAppContext()
-    this.lessonJson.stats.actual_cost_usd = pricing.actualFromCharacters(totalCharacters, this.lessonJson.config.model)
-    this.lessonJson.stats.generation_duration_seconds = Math.round((Date.now() - startedAt) / 1000)
-    this.lessonJson.stats.file_size_mb = Math.round((await fileService.lessonSizeMb(this.outputRoot, this.topicId)) * 100) / 100
-    await fileService.writeLessonJson(this.outputRoot, this.topicId, this.lessonJson)
-    await fileService.appendGenerationLog(this.outputRoot, this.topicId, 'Генерация завершена (см. lesson.json для деталей).')
+    if (!this.queue) return // уже финализировано (защита от повторного вызова)
+    try {
+      // Дожидаемся ВСЕХ уже поставленных в очередь persist(), затем пишем финальную версию —
+      // тем же persistChain, чтобы не гнаться с ещё не отработавшим promise-то из doPersist().
+      await this.persist()
+      if (!this.lessonJson || !this.outputRoot || !this.topicId) return
+      const { fileService } = getAppContext()
+      // issue #8: считаем ПО ВСЕМ done-элементам lesson.json, а не только по this.tasks текущей
+      // сессии — при резюме частично готового урока flattenToTasks() намеренно не включает уже
+      // done элементы (идемпотентность), и сумма только по "новым" tasks занижала бы итоговую
+      // стоимость всего урока.
+      const totalCharacters = sumCharactersForDoneItems(this.lessonJson)
+      this.lessonJson.stats.actual_cost_usd = pricing.actualFromCharacters(totalCharacters, this.lessonJson.config.model)
+      this.lessonJson.stats.generation_duration_seconds = Math.round((Date.now() - startedAt) / 1000)
+      this.lessonJson.stats.file_size_mb = Math.round((await fileService.lessonSizeMb(this.outputRoot, this.topicId)) * 100) / 100
+      await fileService.writeLessonJson(this.outputRoot, this.topicId, this.lessonJson)
+      await fileService.appendGenerationLog(this.outputRoot, this.topicId, 'Генерация завершена (см. lesson.json для деталей).')
+    } finally {
+      // ВСЕГДА обнуляем, даже если запись выше упала — иначе isActive() навсегда останется true
+      // и приложение больше никогда не даст запустить новую генерацию (issue #6).
+      this.queue = null
+    }
   }
 }
 

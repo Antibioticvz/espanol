@@ -214,6 +214,39 @@ describe('GenerationQueue', () => {
     }
   })
 
+  it('КРИТИЧЕСКАЯ РЕГРЕССИЯ (concurrency>=2, второй раунд ревью): pause()->resume() НЕ запускает второй, параллельный runTask() для задачи, которая физически ещё выполняется', async () => {
+    // concurrency=3 > число задач (2) => свободный слот concurrency есть с самого начала —
+    // именно это условие давало старому pause()-коду (resetGeneratingToPending для ВСЕХ статусов)
+    // возможность запустить дубль: resume() видел обе задачи как 'pending' (сброшенные) и добавлял
+    // их заново, а свободный слот позволял НОВОЙ копии стартовать, пока СТАРАЯ ещё синтезирует.
+    const tasks = [makeTask(dir, 'p0'), makeTask(dir, 'p1')]
+    const provider = new FakeProvider({ delayMs: 60 })
+    const queue = new GenerationQueue(tasks, { ...CONFIG, concurrency: 3 }, provider, CTX)
+
+    const runPromise = queue.start()
+    await sleep(15) // обе задачи реально в процессе синтеза ES (внутри 60мс задержки FakeProvider)
+    expect(tasks.every((t) => t.status === 'generating')).toBe(true)
+
+    queue.pause()
+    // Фикс: пауза НЕ маскирует физически выполняющиеся задачи под 'pending' — статус остаётся
+    // честным ('generating'), они доиграют сами. Раньше здесь status стал бы 'pending'.
+    expect(tasks.every((t) => t.status === 'generating')).toBe(true)
+
+    await queue.resume()
+    await runPromise.catch(() => undefined)
+    while (tasks.some((t) => t.status === 'pending' || t.status === 'generating')) {
+      await sleep(10)
+    }
+
+    expect(tasks.every((t) => t.status === 'done')).toBe(true)
+    for (const t of tasks) {
+      // Без фикса здесь было бы 2: второй, параллельный runTask() допечатал бы ещё один вызов
+      // synthesize() для того же текста поверх ещё выполняющегося первого.
+      expect(provider.calls.filter((c) => c === t.esText)).toHaveLength(1)
+      expect(provider.calls.filter((c) => c === t.ruText)).toHaveLength(1)
+    }
+  })
+
   it('РЕГРЕССИЯ: cancel() между синтезом ES и RU не оставляет задачу навечно в "generating"', async () => {
     const tasks = [makeTask(dir, 'p0'), makeTask(dir, 'p1')]
     const provider = new FakeProvider({ delayMs: 30 })

@@ -6,6 +6,7 @@ import type { Provider } from '../core/types/lesson-json'
 import type { TtsModel, TtsVoice } from '../core/tts/tts-provider'
 import type { LessonSummary } from '../core/file/file.service'
 import type { TestGenerationParams, TestGenerationResult } from '../main/test-generation'
+import type { ApiKeyStatus } from '../core/settings/settings.service'
 
 /**
  * Единственная поверхность, которую renderer видит как `window.combine` (contextIsolation: true,
@@ -20,6 +21,8 @@ const api = {
     get: (): Promise<AppSettings> => ipcRenderer.invoke('combine:settings:get'),
     save: (settings: AppSettings): Promise<void> => ipcRenderer.invoke('combine:settings:save', settings),
     hasApiKey: (): Promise<boolean> => ipcRenderer.invoke('combine:settings:has-api-key'),
+    /** issue #10: детальнее hasApiKey() — позволяет UI показать "ключ повреждён, введите заново". */
+    apiKeyStatus: (): Promise<ApiKeyStatus> => ipcRenderer.invoke('combine:settings:api-key-status'),
     isEncryptionAvailable: (): Promise<boolean> => ipcRenderer.invoke('combine:settings:is-encryption-available'),
     setApiKey: (apiKey: string): Promise<void> => ipcRenderer.invoke('combine:settings:set-api-key', apiKey),
     clearApiKey: (): Promise<void> => ipcRenderer.invoke('combine:settings:clear-api-key'),

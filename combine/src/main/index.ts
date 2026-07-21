@@ -16,14 +16,17 @@ if (!gotLock) {
   })
 
   void app.whenReady().then(() => {
-    const mainWindow = createMainWindow()
-    registerIpcHandlers(mainWindow)
+    createMainWindow()
+    // Регистрируем ОДИН раз за жизнь процесса — ipcMain.handle бросает "Attempted to register
+    // a second handler for ..." при повторном вызове. Раньше registerIpcHandlers() дублировался
+    // здесь и в 'activate', и стандартный macOS-флоу «закрыл окно → кликнул по доку» ронял
+    // приложение (issue #5 второго ревью). Хендлеры сами берут АКТУАЛЬНОЕ окно через
+    // window.ts#getCurrentWindow() — не нуждаются в window-параметре, привязанном к конкретному
+    // (возможно, уже уничтоженному) экземпляру BrowserWindow.
+    registerIpcHandlers()
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        const win = createMainWindow()
-        registerIpcHandlers(win)
-      }
+      if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
     })
   })
 

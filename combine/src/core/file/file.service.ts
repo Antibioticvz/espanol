@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, rm, readdir, stat, appendFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, rm, readdir, rename, stat, appendFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import NodeID3 from 'node-id3'
@@ -126,12 +126,29 @@ export class FileService {
     }
   }
 
+  /**
+   * Атомарная запись: пишем во временный файл в ТОЙ ЖЕ директории (гарантирует одну файловую
+   * систему -> rename() атомарен по POSIX) и переименовываем поверх финального пути. Читатель
+   * (readLessonJson, resume после падения процесса, экран библиотеки) никогда не увидит
+   * частично записанный файл — либо старая версия целиком, либо новая целиком, без разрыва
+   * посреди JSON. Без этого падение процесса ровно во время writeFile() оставляет битый
+   * lesson.json, из которого невозможно резюмировать генерацию (см. §9 спеки, D-16).
+   */
   async writeLessonJson(outputRoot: string, topicId: string, lesson: LessonJson): Promise<string> {
     await this.validateLessonJson(lesson)
     await this.ensureLessonDirs(outputRoot, topicId)
-    const path = join(this.lessonDir(outputRoot, topicId), 'lesson.json')
-    await writeFile(path, JSON.stringify(lesson, null, 2), 'utf8')
-    return path
+    const dir = this.lessonDir(outputRoot, topicId)
+    const finalPath = join(dir, 'lesson.json')
+    const tmpPath = join(dir, `.lesson.json.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+    const json = JSON.stringify(lesson, null, 2)
+    try {
+      await writeFile(tmpPath, json, 'utf8')
+      await rename(tmpPath, finalPath)
+    } catch (e) {
+      await rm(tmpPath, { force: true }).catch(() => undefined)
+      throw e
+    }
+    return finalPath
   }
 
   async readLessonJson(outputRoot: string, topicId: string): Promise<LessonJson> {

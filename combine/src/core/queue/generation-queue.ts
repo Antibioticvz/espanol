@@ -53,6 +53,19 @@ export class GenerationQueue extends EventEmitter {
   private runState: QueueRunState = 'idle'
   private startedAt = 0
   private spentUsd = 0
+  /**
+   * phraseId'ы задач, чей runTask() СЕЙЧАС физически выполняется (между входом в функцию и
+   * finally). Источник истины отдельно от GenerationTask.status — см. CRITICAL-фикс в start():
+   * status одной и той же задачи мог быть сброшен в 'pending' (напр. историческим кодом pause()),
+   * но это НЕ значит, что реальный synthesize()/writeFile() уже прекратился — JS-промис
+   * runTask() продолжает выполняться в фоне независимо от того, что мы делаем с полем status.
+   * Если start()/resume() полагается только на status для решения "что добавить в очередь",
+   * при concurrency ≥ 2 может найтись свободный слот concurrency, куда допишется ВТОРОЙ,
+   * параллельный вызов runTask() для ТОЙ ЖЕ задачи, пока первый ещё не закончил — двойной
+   * платный запрос и гонка двух writeFile()/NodeID3.write() в один и тот же mp3 (порча файла).
+   * inFlight — единственный надёжный признак "не трогать, физически уже выполняется".
+   */
+  private readonly inFlight = new Set<string>()
 
   constructor(tasks: GenerationTask[], config: QueueConfig, provider: TTSProvider, ctx: SynthesizeContext, opts: GenerationQueueOptions = {}) {
     super()
@@ -130,7 +143,9 @@ export class GenerationQueue extends EventEmitter {
     queue.concurrency = this.config.concurrency
     if (queue.isPaused) queue.start()
 
-    const toRun = this.tasks.filter((t) => t.status === 'pending' || t.status === 'failed')
+    // !this.inFlight.has(...) — см. докстринг поля inFlight выше: не переставляем в очередь
+    // задачу, чей runTask() физически ещё выполняется, даже если её status почему-то 'pending'.
+    const toRun = this.tasks.filter((t) => (t.status === 'pending' || t.status === 'failed') && !this.inFlight.has(t.phraseId))
     for (const task of toRun) {
       task.status = 'pending'
       task.error = null
@@ -145,51 +160,51 @@ export class GenerationQueue extends EventEmitter {
   }
 
   /**
-   * Останавливает выдачу НОВЫХ задач. Уже стартовавшие задачи доводятся до конца (done/failed).
+   * Останавливает выдачу НОВЫХ задач. Уже физически стартовавшие задачи доводятся до конца
+   * (done/failed) САМИ — их status остаётся 'generating' до этого момента, мы его здесь
+   * НЕ трогаем (см. CRITICAL-фикс выше и класс-докстринг поля inFlight): раньше pause() сбрасывал
+   * 'generating'→'pending' для ВСЕХ текущих задач, что при concurrency ≥ 2 и наличии свободного
+   * слота позволяло resume()→start() запустить ВТОРОЙ, параллельный runTask() для задачи, чей
+   * первый вызов ещё не завершился — двойная генерация (двойные деньги у ElevenLabs, гонка двух
+   * writeFile()/NodeID3.write() в один mp3). Теперь единственная защита от повторной постановки —
+   * inFlight (see toRun в start()), а status='generating' во время паузы просто означает "уже
+   * реально озвучивается, доиграет сам" — ЧЕСТНО отражает происходящее, а не выдаёт желаемое
+   * (сброшенный pending) за действительное.
    *
-   * ВАЖНО: обязательно чистим внутреннюю очередь p-queue (queue.clear()) — иначе задачи,
-   * которые уже были добавлены в p-queue предыдущим start(), но ещё не начали выполняться
-   * (ждут свободного слота concurrency), остаются в её внутреннем списке. При resume()->start()
-   * они заново проходят фильтр pending/failed (их GenerationTask.status ещё 'pending', т.к.
-   * runTask() для них не вызывался) и добавляются В ДОПОЛНЕНИЕ к уже сидящим в p-queue —
-   * фраза озвучивается ДВАЖДЫ (двойная стоимость у реального API, гонка при записи файла).
-   * clear() безопасен: сами GenerationTask остаются 'pending' и корректно подхватятся заново
-   * следующим start(), но уже ровно одним queue.add().
+   * queue.clear() всё равно обязателен — он убирает НЕ начатые задачи (никогда не входившие в
+   * inFlight), которые predыдущий start() уже добавил в p-queue, но которые ещё ждут свободного
+   * слота concurrency; без очистки resume()→start() добавил бы для них ВТОРУЮ копию.
    */
   pause(): void {
     if (this.runState !== 'running') return
     this.runState = 'paused'
     this.pQueue?.pause()
     this.pQueue?.clear()
-    this.resetGeneratingToPending()
     this.emitProgress()
   }
 
-  /** Возобновление — берёт только pending+failed (см. класс-докстринг). */
+  /** Возобновление — берёт только pending+failed, физически не выполняющиеся (см. класс-докстринг). */
   async resume(): Promise<void> {
     if (this.runState !== 'paused' && this.runState !== 'cancelled') return
     await this.start()
   }
 
-  /** Как pause(), но семантически финальна (runState='cancelled'). */
+  /**
+   * В отличие от pause(), cancel() СЕМАНТИЧЕСКИ финализирует незавершённые задачи как "не сделано":
+   * runTask() проверяет `runState === 'cancelled'` после ES-половины и рано выходит, поэтому здесь
+   * безопасно сразу пометить текущие 'generating' как 'pending' — тот самый ранний return в
+   * runTask() гарантирует, что физически ещё выполняющийся вызов НЕ перезапишет это обратно
+   * в 'done' сам. (При pause() такой гарантии нет — там in-flight просто доигрывает как обычно —
+   * поэтому там мы status не трогаем, см. докстринг pause().)
+   */
   cancel(): void {
     this.runState = 'cancelled'
     this.pQueue?.pause()
     this.pQueue?.clear()
-    this.resetGeneratingToPending()
-    this.emitProgress()
-  }
-
-  /**
-   * Задачи, застрявшие в 'generating' на момент pause()/cancel(), возвращаем в 'pending' —
-   * иначе задача, отменённая между синтезом ES и RU (см. runTask: ранний return после ES,
-   * если runState стал 'cancelled'), навсегда остаётся в 'generating': resume() фильтрует
-   * только pending/failed, такая фраза больше никогда не попадёт в очередь и урок не завершится.
-   */
-  private resetGeneratingToPending(): void {
     for (const t of this.tasks) {
       if (t.status === 'generating') t.status = 'pending'
     }
+    this.emitProgress()
   }
 
   private async runTask(task: GenerationTask): Promise<void> {
@@ -197,29 +212,36 @@ export class GenerationQueue extends EventEmitter {
     // Идемпотентность/защита от двойной постановки в очередь (см. докстринг pause() выше):
     // если эта же задача каким-то образом уже выполнена — не переозвучиваем и не перезаписываем файл.
     if (task.status === 'done') return
-    task.status = 'generating'
-    this.emitProgress({
-      currentItemId: task.phraseId,
-      currentText: task.esText,
-      item: { phraseId: task.phraseId, status: 'generating' }
-    })
+    // inFlight помечаем ДО первого await — тем самым закрывая окно, в которое toRun (start())
+    // мог бы посчитать эту же задачу "свободной" и добавить её в очередь повторно.
+    this.inFlight.add(task.phraseId)
     try {
-      await this.synthesizeLang(task, 'es')
-      if ((this.runState as QueueRunState) === 'cancelled') return
-      await this.synthesizeLang(task, 'ru')
-      task.status = 'done'
-      task.error = null
+      task.status = 'generating'
       this.emitProgress({
-        item: { phraseId: task.phraseId, status: 'done' },
-        logLine: `[OK] ${task.phraseId} готово (ES ${task.esDurationMs ?? 0}мс, RU ${task.ruDurationMs ?? 0}мс)`
+        currentItemId: task.phraseId,
+        currentText: task.esText,
+        item: { phraseId: task.phraseId, status: 'generating' }
       })
-    } catch (e) {
-      task.status = 'failed'
-      task.error = e instanceof Error ? e.message : String(e)
-      this.emitProgress({
-        item: { phraseId: task.phraseId, status: 'failed', error: task.error },
-        logLine: `[FAIL] ${task.phraseId}: ${task.error}`
-      })
+      try {
+        await this.synthesizeLang(task, 'es')
+        if ((this.runState as QueueRunState) === 'cancelled') return
+        await this.synthesizeLang(task, 'ru')
+        task.status = 'done'
+        task.error = null
+        this.emitProgress({
+          item: { phraseId: task.phraseId, status: 'done' },
+          logLine: `[OK] ${task.phraseId} готово (ES ${task.esDurationMs ?? 0}мс, RU ${task.ruDurationMs ?? 0}мс)`
+        })
+      } catch (e) {
+        task.status = 'failed'
+        task.error = e instanceof Error ? e.message : String(e)
+        this.emitProgress({
+          item: { phraseId: task.phraseId, status: 'failed', error: task.error },
+          logLine: `[FAIL] ${task.phraseId}: ${task.error}`
+        })
+      }
+    } finally {
+      this.inFlight.delete(task.phraseId)
     }
   }
 

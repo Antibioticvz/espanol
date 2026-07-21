@@ -3,7 +3,13 @@ import { ParserService, computeStats } from '../../core/parser/parser.service'
 import { MockSayService } from '../../core/tts/mock-say.service'
 import { ElevenLabsService } from '../../core/tts/eleven-labs.service'
 import type { TTSProvider } from '../../core/tts/tts-provider'
-import { applyTaskResult, buildLessonSkeleton, flattenToTasks, markId3Written } from '../../core/queue/build-items'
+import {
+  applyTaskResult,
+  buildLessonSkeleton,
+  flattenToTasks,
+  markId3Written,
+  sumCharactersForDoneItems
+} from '../../core/queue/build-items'
 import { GenerationQueue } from '../../core/queue/generation-queue'
 import { FileService } from '../../core/file/file.service'
 import { CostCalculator } from '../../core/cost/cost-calculator'
@@ -12,6 +18,11 @@ import type { LessonJson, VoiceRef } from '../../core/types/lesson-json'
 import type { GenerationTask, QueueConfig } from '../../core/types/generation'
 import { getSharedSchemaPath } from '../../core/util/paths'
 import { boolFlag, numFlag, strFlag, type CliFlags } from '../args'
+
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min
+  return Math.min(max, Math.max(min, value))
+}
 
 /**
  * `cli generate --input <файл> --provider mock_say|elevenlabs --out <папка> [--export-zip] [опции]`
@@ -58,15 +69,19 @@ export async function runGenerate(flags: CliFlags): Promise<number> {
   const lesson = parseResult.lesson
 
   const model = strFlag(flags, 'model') ?? (providerName === 'mock_say' ? 'macos_say' : 'eleven_multilingual_v2')
+  // Клампим на всякий случай (issue #11 второго ревью): отрицательный/мусорный --max-retries
+  // (напр. -1) заставлял ElevenLabsService.withRetry() ни разу не войти в цикл `for (attempt=0;
+  // attempt<=maxRetries; ...)` и в итоге `throw lastError`, который так и остался `undefined` —
+  // непонятный "throw undefined" вместо внятной ошибки. delay-ms/timeout-ms клампим аналогично.
   const queueConfig: QueueConfig = {
-    concurrency: Math.min(5, Math.max(1, numFlag(flags, 'concurrency', 3))),
-    maxRetries: numFlag(flags, 'max-retries', 3),
-    delayMs: numFlag(flags, 'delay-ms', 100),
-    timeoutMs: numFlag(flags, 'timeout-ms', 30000)
+    concurrency: clamp(numFlag(flags, 'concurrency', 3), 1, 5),
+    maxRetries: clamp(numFlag(flags, 'max-retries', 3), 0, 10),
+    delayMs: clamp(numFlag(flags, 'delay-ms', 100), 0, 60_000),
+    timeoutMs: clamp(numFlag(flags, 'timeout-ms', 30_000), 1_000, 300_000)
   }
-  const stability = flags.stability !== undefined ? numFlag(flags, 'stability', 0.5) : null
-  const similarityBoost = flags['similarity-boost'] !== undefined ? numFlag(flags, 'similarity-boost', 0.75) : null
-  const seed = flags.seed !== undefined ? numFlag(flags, 'seed', 0) : null
+  const stability = flags.stability !== undefined ? clamp(numFlag(flags, 'stability', 0.5), 0, 1) : null
+  const similarityBoost = flags['similarity-boost'] !== undefined ? clamp(numFlag(flags, 'similarity-boost', 0.75), 0, 1) : null
+  const seed = flags.seed !== undefined ? Math.max(0, Math.trunc(numFlag(flags, 'seed', 0))) : null
 
   let provider: TTSProvider
   if (providerName === 'mock_say') {
@@ -136,16 +151,25 @@ export async function runGenerate(flags: CliFlags): Promise<number> {
   const addId3 = !boolFlag(flags, 'no-id3')
   const startedAt = Date.now()
 
-  const applyAndPersist = async (): Promise<void> => {
-    for (const t of tasks) {
-      applyTaskResult(lessonJson, t)
-      if (addId3 && t.status === 'done') markId3Written(lessonJson, t)
-    }
-    try {
-      await fileService.writeLessonJson(outRoot, topicId, lessonJson)
-    } catch (e) {
-      console.warn(`⚠ Не удалось сохранить промежуточный lesson.json: ${e instanceof Error ? e.message : String(e)}`)
-    }
+  // Сериализуем ВСЕ записи lesson.json через цепочку промисов (issue #4 второго ревью): при
+  // concurrency > 1 несколько задач могут завершиться почти одновременно, и без сериализации
+  // несколько fire-and-forget applyAndPersist() гоняли бы конкурентные writeLessonJson() —
+  // сама запись атомарна (temp+rename, см. FileService), но порядок применения состояния
+  // нуждается в дисциплине вызова, иначе поздняя запись может проиграть более ранней.
+  let persistChain: Promise<void> = Promise.resolve()
+  const applyAndPersist = (): Promise<void> => {
+    persistChain = persistChain.then(async () => {
+      for (const t of tasks) {
+        applyTaskResult(lessonJson, t)
+        if (addId3 && t.status === 'done') markId3Written(lessonJson, t)
+      }
+      try {
+        await fileService.writeLessonJson(outRoot, topicId, lessonJson)
+      } catch (e) {
+        console.warn(`⚠ Не удалось сохранить промежуточный lesson.json: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    })
+    return persistChain
   }
 
   const queue = new GenerationQueue(
@@ -172,14 +196,13 @@ export async function runGenerate(flags: CliFlags): Promise<number> {
     }
   )
 
-  let lastPersist: Promise<void> = Promise.resolve()
   queue.on('progress', (event) => {
     if (event.logLine) console.log(event.logLine)
     // Персистим lesson.json на КАЖДОЕ завершение задачи целиком (done/failed без lang — см.
     // класс-докстринг GenerationQueue), а не на каждый под-шаг ES/RU — идемпотентность и
     // устойчивость к падению процесса посреди долгой генерации (docs/SPEC_COMBINE.md §9).
     if (event.item && !event.item.lang && (event.item.status === 'done' || event.item.status === 'failed')) {
-      lastPersist = applyAndPersist()
+      void applyAndPersist()
     }
   })
 
@@ -192,12 +215,16 @@ export async function runGenerate(flags: CliFlags): Promise<number> {
   process.on('SIGINT', onSigint)
 
   await queue.start()
-  await lastPersist
+  await persistChain // дожидаемся ВСЕХ уже поставленных в очередь persist-записей по порядку
   process.off('SIGINT', onSigint)
 
   await applyAndPersist()
 
-  const totalCharacters = tasks.reduce((sum, t) => sum + (t.esCharacters ?? 0) + (t.ruCharacters ?? 0), 0)
+  // issue #8 второго ревью: считаем ПО ВСЕМ done-элементам lesson.json (включая завершённые в
+  // ПРЕДЫДУЩИХ запусках при резюме), а не только по tasks текущей сессии — flattenToTasks()
+  // намеренно не включает уже done элементы (идемпотентность), и сумма только по "новым" tasks
+  // занижала бы итоговую стоимость всего урока.
+  const totalCharacters = sumCharactersForDoneItems(lessonJson)
   lessonJson.stats.actual_cost_usd = pricing.actualFromCharacters(totalCharacters, model)
   lessonJson.stats.generation_duration_seconds = Math.round((Date.now() - startedAt) / 1000)
   lessonJson.stats.file_size_mb = Math.round((await fileService.lessonSizeMb(outRoot, topicId)) * 100) / 100
