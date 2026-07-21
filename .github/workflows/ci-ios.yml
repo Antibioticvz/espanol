@@ -1,0 +1,39 @@
+name: CI iOS
+
+on:
+  push:
+    branches: [main]
+    paths: ['ios/**', 'shared/**', '.github/workflows/ci-ios.yml']
+  pull_request:
+    paths: ['ios/**', 'shared/**', '.github/workflows/ci-ios.yml']
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    name: Build & test on simulator
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Pick simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available --json \
+            | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['udid'] for devs in d.values() for dev in devs if 'iPhone' in dev['name']))")
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+      - name: Build
+        run: |
+          xcodebuild -project AudioLearner.xcodeproj -scheme AudioLearner \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Test
+        run: |
+          xcodebuild -project AudioLearner.xcodeproj -scheme AudioLearner \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            CODE_SIGNING_ALLOWED=NO test

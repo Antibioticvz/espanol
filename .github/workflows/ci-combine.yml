@@ -1,0 +1,32 @@
+name: CI Combine
+
+on:
+  push:
+    branches: [main]
+    paths: ['combine/**', 'shared/**', '.github/workflows/ci-combine.yml']
+  pull_request:
+    paths: ['combine/**', 'shared/**', '.github/workflows/ci-combine.yml']
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Typecheck, tests, build
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: combine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: combine/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests (no real API calls)
+        run: npm test
+      - name: Build
+        run: npm run build
