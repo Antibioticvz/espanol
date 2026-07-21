@@ -8,10 +8,11 @@ import Observation
 final class PlayerViewModel {
     @ObservationIgnored let env: AppEnvironment
     @ObservationIgnored let flow: SessionFlow
-    @ObservationIgnored private let lockScreen = LockScreenService()
 
     var player: SessionPlayerService { flow.player }
     var showParameters = false
+    /// Наблюдаемое зеркало избранного текущей фразы (CoreData-атрибут @Observable не отслеживает).
+    private(set) var isCurrentFavorite = false
 
     @ObservationIgnored private var learningSession: LearningSession?
     @ObservationIgnored private var startedAt = Date()
@@ -47,6 +48,7 @@ final class PlayerViewModel {
         }
         learningSession = session
         try? env.viewContext.save()
+        env.activeSessionID = session.objectID
 
         // Настраиваем аудио-сессию и lock screen. Колбэки могут приходить не с main —
         // возвращаемся на главный актор перед обращением к плееру.
@@ -61,11 +63,12 @@ final class PlayerViewModel {
             Task { @MainActor in self?.player.pause(); self?.updateNowPlaying() }
         }
 
-        lockScreen.setupRemoteCommands()
-        lockScreen.onPlay = { [weak self] in Task { @MainActor in self?.player.play(); self?.updateNowPlaying() } }
-        lockScreen.onPause = { [weak self] in Task { @MainActor in self?.player.pause(); self?.updateNowPlaying() } }
-        lockScreen.onNext = { [weak self] in Task { @MainActor in self?.next() } }
-        lockScreen.onPrevious = { [weak self] in Task { @MainActor in self?.previous() } }
+        env.lockScreen.setupRemoteCommands()
+        env.lockScreen.onPlay = { [weak self] in Task { @MainActor in self?.player.play(); self?.updateNowPlaying() } }
+        env.lockScreen.onPause = { [weak self] in Task { @MainActor in self?.player.pause(); self?.updateNowPlaying() } }
+        env.lockScreen.onToggle = { [weak self] in Task { @MainActor in self?.player.togglePlayPause(); self?.updateNowPlaying() } }
+        env.lockScreen.onNext = { [weak self] in Task { @MainActor in self?.next() } }
+        env.lockScreen.onPrevious = { [weak self] in Task { @MainActor in self?.previous() } }
 
         // Колбэки плеера.
         player.onPhraseCompleted = { [weak self] phraseId in self?.handlePhraseCompleted(phraseId) }
@@ -73,6 +76,7 @@ final class PlayerViewModel {
         player.onItemChanged = { [weak self] in self?.updateNowPlaying() }
 
         player.configure(phrases: playables, config: flow.config)
+        player.volume = env.settings.defaultVolume
         player.start()
         updateNowPlaying()
     }
@@ -110,12 +114,17 @@ final class PlayerViewModel {
               let phrase = try? env.repository.phrase(phraseId: phraseId) else { return }
         phrase.isFavorite.toggle()
         try? env.viewContext.save()
+        isCurrentFavorite = phrase.isFavorite
     }
 
-    var isCurrentFavorite: Bool {
+    /// Синхронизирует наблюдаемое зеркало избранного (вызывается при смене фразы).
+    private func syncFavorite() {
         guard let phraseId = player.currentPhrase?.phraseId,
-              let phrase = try? env.repository.phrase(phraseId: phraseId) else { return false }
-        return phrase.isFavorite
+              let phrase = try? env.repository.phrase(phraseId: phraseId) else {
+            isCurrentFavorite = false
+            return
+        }
+        isCurrentFavorite = phrase.isFavorite
     }
 
     // MARK: - SRS
@@ -177,7 +186,8 @@ final class PlayerViewModel {
         // Рекомендации по повтору.
         let recommendations = buildRecommendations()
 
-        lockScreen.clear()
+        env.lockScreen.clear()
+        env.activeSessionID = nil
         env.refreshWidgetStats(now: completedAt)
         Haptics.success(enabled: env.settings.sessionCompleteVibration)
 
@@ -194,10 +204,29 @@ final class PlayerViewModel {
         flow.step = .completed
     }
 
-    /// Пользователь завершил сессию вручную.
+    /// Пользователь завершил сессию вручную. Засчитываем как завершённую, только если
+    /// проиграна хотя бы одна фраза; иначе — отмена (запись сессии удаляется).
     func endEarly() {
         player.pause()
-        finish()
+        if player.completedPhraseIds.isEmpty {
+            abandon()
+        } else {
+            finish()
+        }
+    }
+
+    /// Отмена сессии без единой завершённой фразы: чистим запись и lock screen.
+    private func abandon() {
+        didFinish = true
+        if let session = learningSession {
+            env.viewContext.delete(session)
+            try? env.viewContext.save()
+        }
+        env.lockScreen.clear()
+        env.activeSessionID = nil
+        player.reset()
+        flow.reset()
+        env.selectedTab = .lessons
     }
 
     private func evaluateAchievements(now: Date) -> [Achievement] {
@@ -239,8 +268,9 @@ final class PlayerViewModel {
     // MARK: - Now Playing
 
     func updateNowPlaying() {
+        syncFavorite()
         guard let phrase = player.currentPhrase else { return }
-        lockScreen.update(
+        env.lockScreen.update(
             textEs: phrase.textEs,
             textRu: phrase.textRu,
             lessonTitle: flow.lesson?.titleRu ?? "",

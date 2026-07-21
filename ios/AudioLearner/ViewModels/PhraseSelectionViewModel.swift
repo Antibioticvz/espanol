@@ -10,25 +10,66 @@ final class PhraseSelectionViewModel {
     var selectedIds: Set<String>
     var searchText = ""
     var statusFilter: PhraseState?
+    /// Фильтр по диапазону групп (1-10, 11-20, …); nil = все группы.
+    var groupRangeFilter: ClosedRange<Int>?
     var expandedBlockIds: Set<String> = []
     var expandedGroupKeys: Set<String> = []
+
+    /// Предвычисленные нижние регистры текста для быстрого поиска.
+    @ObservationIgnored private var textCache: [String: (es: String, ru: String)] = [:]
+    /// Глобальный 1-based индекс группы по ключу «blockId-key».
+    @ObservationIgnored private var groupIndexByKey: [String: Int] = [:]
 
     init(lesson: Lesson, initialSelection: [String]) {
         self.lesson = lesson
         self.selectedIds = Set(initialSelection)
-        // По умолчанию раскрываем все блоки.
+        // По умолчанию раскрываем все блоки и группы.
         self.expandedBlockIds = Set(lesson.orderedBlocks.map(\.blockId))
+        var groupKeys: Set<String> = []
+        var groupIndex = 0
+        for block in lesson.orderedBlocks where block.blockTypeEnum?.hasGroups == true {
+            for group in block.orderedGroups {
+                groupIndex += 1
+                let key = "\(block.blockId)-\(group.key)"
+                groupKeys.insert(key)
+                groupIndexByKey[key] = groupIndex
+            }
+        }
+        self.expandedGroupKeys = groupKeys
+        // Кэш нижнего регистра.
+        for phrase in lesson.allLearnablePhrases {
+            textCache[phrase.phraseId] = (phrase.textEs.lowercased(), phrase.textRu.lowercased())
+        }
+    }
+
+    /// Доступные диапазоны групп для фильтра.
+    var groupRanges: [ClosedRange<Int>] {
+        let count = groupIndexByKey.count
+        guard count > 1 else { return [] }
+        var ranges: [ClosedRange<Int>] = []
+        var start = 1
+        while start <= count {
+            ranges.append(start...min(start + 9, count))
+            start += 10
+        }
+        return ranges
     }
 
     // MARK: - Filtering
 
     func matches(_ phrase: Phrase) -> Bool {
         if let statusFilter, phrase.stateEnum != statusFilter { return false }
+        if let range = groupRangeFilter {
+            guard let group = phrase.group,
+                  let idx = groupIndexByKey["\(group.block.blockId)-\(group.key)"],
+                  range.contains(idx) else { return false }
+        }
         if !searchText.isEmpty {
             let q = searchText.lowercased()
-            if !phrase.textEs.lowercased().contains(q) && !phrase.textRu.lowercased().contains(q) {
-                return false
-            }
+            let cached = textCache[phrase.phraseId]
+            let es = cached?.es ?? phrase.textEs.lowercased()
+            let ru = cached?.ru ?? phrase.textRu.lowercased()
+            if !es.contains(q) && !ru.contains(q) { return false }
         }
         return true
     }

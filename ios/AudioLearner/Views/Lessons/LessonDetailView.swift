@@ -65,10 +65,7 @@ struct LessonDetailView: View {
                 }
             }
             .sheet(isPresented: $showShare) {
-                if let exportURL {
-                    ShareLink(item: exportURL) { Text("Поделиться CSV") }
-                        .presentationDetents([.medium])
-                }
+                if let exportURL { ShareSheet(items: [exportURL]) }
             }
         }
     }

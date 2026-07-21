@@ -40,6 +40,7 @@ struct LessonListView: View {
     @State private var renameTarget: Lesson?
     @State private var renameText = ""
     @State private var statsTarget: Lesson?
+    @State private var deleteTarget: Lesson?
 
     var body: some View {
         NavigationStack {
@@ -57,14 +58,14 @@ struct LessonListView: View {
                                           onPlay: { env.startSession(for: lesson) },
                                           onStats: { statsTarget = lesson })
                             .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) { delete(lesson) } label: {
+                                Button(role: .destructive) { deleteTarget = lesson } label: {
                                     Label("Удалить", systemImage: "trash")
                                 }
                             }
                             .contextMenu {
                                 Button { beginRename(lesson) } label: { Label("Переименовать", systemImage: "pencil") }
                                 Button { statsTarget = lesson } label: { Label("Статистика", systemImage: "chart.bar") }
-                                Button(role: .destructive) { delete(lesson) } label: { Label("Удалить урок", systemImage: "trash") }
+                                Button(role: .destructive) { deleteTarget = lesson } label: { Label("Удалить урок", systemImage: "trash") }
                             }
                         }
                     }
@@ -100,6 +101,17 @@ struct LessonListView: View {
                 Button("Отмена", role: .cancel) { renameTarget = nil }
                 Button("Сохранить") { commitRename() }
             }
+            .confirmationDialog(
+                "Удалить урок?",
+                isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }),
+                titleVisibility: .visible,
+                presenting: deleteTarget
+            ) { lesson in
+                Button("Удалить «\(lesson.titleRu)»", role: .destructive) { performDelete(lesson) }
+                Button("Отмена", role: .cancel) { deleteTarget = nil }
+            } message: { _ in
+                Text("Урок и весь его прогресс будут удалены безвозвратно.")
+            }
             .onChange(of: env.pendingImportURL) { _, newValue in
                 if newValue != nil { showImport = true }
             }
@@ -124,9 +136,15 @@ struct LessonListView: View {
         return result
     }
 
-    private func delete(_ lesson: Lesson) {
+    private func performDelete(_ lesson: Lesson) {
+        // Если удаляем урок идущей сессии — сперва гасим её (иначе крэш на invalidated объекте).
+        if env.sessionFlow.lesson?.objectID == lesson.objectID {
+            env.endActiveSession(abandoned: true)
+            env.sessionFlow.reset()
+        }
         try? env.repository.delete(lesson)
         env.refreshWidgetStats()
+        deleteTarget = nil
     }
 
     private func beginRename(_ lesson: Lesson) {
@@ -157,7 +175,7 @@ struct LessonRowView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Text("\(Format.phraseCount(Int(lesson.phraseCount))) · \(lesson.vocabCount) слов · рассказ: \(lesson.storyCount)")
+            Text("\(Format.phraseCount(Int(lesson.phraseCount))) · \(Format.wordCount(Int(lesson.vocabCount)))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

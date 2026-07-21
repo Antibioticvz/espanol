@@ -20,8 +20,9 @@ struct PhraseSelectionView: View {
                 Button("Назад") { env.sessionFlow.step = .pickLesson }
             }
         }
-        .task {
-            if vm == nil, let lesson = env.sessionFlow.lesson {
+        // Пересоздаём VM при смене урока (иначе дерево осталось бы от прежнего урока).
+        .task(id: env.sessionFlow.lesson?.objectID) {
+            if let lesson = env.sessionFlow.lesson {
                 vm = PhraseSelectionViewModel(lesson: lesson, initialSelection: env.sessionFlow.selectedPhraseIds)
             }
         }
@@ -45,16 +46,30 @@ struct PhraseSelectionView: View {
 
     private func filterBar(_ vm: PhraseSelectionViewModel) -> some View {
         @Bindable var vm = vm
-        return ScrollView(.horizontal, showsIndicators: false) {
-            HStack {
-                filterChip("Все", isOn: vm.statusFilter == nil) { vm.statusFilter = nil }
-                ForEach(PhraseState.allCases) { state in
-                    filterChip(state.titleRu, isOn: vm.statusFilter == state) { vm.statusFilter = state }
+        return VStack(spacing: 4) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack {
+                    filterChip("Все", isOn: vm.statusFilter == nil) { vm.statusFilter = nil }
+                    ForEach(PhraseState.allCases) { state in
+                        filterChip(state.titleRu, isOn: vm.statusFilter == state) { vm.statusFilter = state }
+                    }
+                }
+                .padding(.horizontal)
+            }
+            if !vm.groupRanges.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack {
+                        filterChip("Все группы", isOn: vm.groupRangeFilter == nil) { vm.groupRangeFilter = nil }
+                        ForEach(vm.groupRanges, id: \.self) { range in
+                            filterChip("\(range.lowerBound)-\(range.upperBound)",
+                                       isOn: vm.groupRangeFilter == range) { vm.groupRangeFilter = range }
+                        }
+                    }
+                    .padding(.horizontal)
                 }
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
         }
+        .padding(.vertical, 8)
     }
 
     private func filterChip(_ title: String, isOn: Bool, action: @escaping () -> Void) -> some View {

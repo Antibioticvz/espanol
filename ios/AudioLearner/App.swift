@@ -10,7 +10,6 @@ struct AudioLearnerApp: App {
                 .environment(env)
                 .environment(\.managedObjectContext, env.viewContext)
                 .preferredColorScheme(env.settings.theme.colorScheme)
-                .dynamicTypeSize(.large)
                 .task { env.onLaunch() }
                 .onOpenURL { url in
                     env.pendingImportURL = url

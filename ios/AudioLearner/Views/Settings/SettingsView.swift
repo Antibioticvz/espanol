@@ -1,10 +1,15 @@
 import SwiftUI
 
-/// Экран 7: параметры (спека §4.9).
+/// Экран 7: параметры (спека §4.9). Каждая настройка реально влияет на поведение.
 struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var showRestore = false
-    @State private var backupMessage: String?
+    @State private var infoMessage: String?
+    @State private var backupSize = 0
+    @State private var isWorking = false
+    @State private var exportURL: URL?
+    @State private var showShare = false
+    @State private var confirmClearStage = 0
 
     var body: some View {
         @Bindable var settings = env.settings
@@ -22,27 +27,29 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Параметры")
-            .sheet(isPresented: $showRestore) {
-                BackupRestoreView()
+            .sheet(isPresented: $showRestore) { BackupRestoreView() }
+            .sheet(isPresented: $showShare) {
+                if let exportURL { ShareSheet(items: [exportURL]) }
             }
-            .alert("Резервная копия", isPresented: Binding(get: { backupMessage != nil }, set: { if !$0 { backupMessage = nil } })) {
-                Button("OK", role: .cancel) { backupMessage = nil }
-            } message: {
-                Text(backupMessage ?? "")
-            }
+            .alert("Готово", isPresented: Binding(get: { infoMessage != nil }, set: { if !$0 { infoMessage = nil } })) {
+                Button("OK", role: .cancel) { infoMessage = nil }
+            } message: { Text(infoMessage ?? "") }
+            .task { backupSize = env.backup.totalBackupSize() }
         }
     }
 
+    // MARK: - Sections
+
     private func appearanceSection(_ settings: AppSettings) -> some View {
         @Bindable var settings = settings
-        return Section("Внешний вид") {
+        return Section {
             Picker("Тема оформления", selection: $settings.theme) {
                 ForEach(ThemeStyle.allCases) { Text($0.titleRu).tag($0) }
             }
-            VStack(alignment: .leading) {
-                Text("Размер шрифта: \(Int(settings.fontScale * 100))%")
-                Slider(value: $settings.fontScale, in: 0.8...1.4, step: 0.1)
-            }
+        } header: {
+            Text("Внешний вид")
+        } footer: {
+            Text("Размер шрифта следует системному (Настройки → Экран и яркость → Размер текста).")
         }
     }
 
@@ -50,7 +57,6 @@ struct SettingsView: View {
         @Bindable var settings = settings
         return Section("Аудио") {
             Toggle("Вибрация", isOn: $settings.vibrationEnabled)
-            Toggle("Звуки перехода", isOn: $settings.soundEnabled)
             Toggle("Вибрация при завершении", isOn: $settings.sessionCompleteVibration)
             VStack(alignment: .leading) {
                 Text("Громкость по умолчанию: \(Int(settings.defaultVolume * 100))%")
@@ -65,7 +71,9 @@ struct SettingsView: View {
             Picker("Режим по умолчанию", selection: $settings.defaultPlaybackMode) {
                 ForEach(PlaybackMode.allCases) { Text($0.titleRu).tag($0) }
             }
-            Toggle("Автопереход к след. фразе", isOn: $settings.autoNextPhrase)
+            Picker("Текст на lock screen", selection: $settings.lockScreenDisplay) {
+                ForEach(LockScreenTextMode.allCases) { Text($0.titleRu).tag($0) }
+            }
             Toggle("Обновлять статусы фраз", isOn: $settings.defaultTrackProgress)
         }
     }
@@ -85,27 +93,78 @@ struct SettingsView: View {
 
     private var dataSection: some View {
         Section("Данные и резервная копия") {
-            let size = env.backup.totalBackupSize()
-            LabeledContent("Размер копий", value: byteString(size))
+            LabeledContent("Размер копий", value: ByteCountFormatter.string(fromByteCount: Int64(backupSize), countStyle: .file))
+            if let last = env.backup.lastBackupDate {
+                LabeledContent("Последняя копия", value: Format.dateTime(last))
+            }
             Button {
-                if (try? env.backup.createBackup(settings: env.settings.snapshot())) != nil {
-                    backupMessage = "Резервная копия создана."
-                } else {
-                    backupMessage = "Не удалось создать копию."
-                }
+                createBackup()
             } label: {
                 Label("Создать резервную копию", systemImage: "externaldrive.badge.plus")
             }
-            Button {
-                showRestore = true
-            } label: {
+            .disabled(isWorking)
+            Button { showRestore = true } label: {
                 Label("Восстановить из копии", systemImage: "arrow.uturn.backward")
+            }
+            Button {
+                exportData()
+            } label: {
+                Label("Экспортировать данные (ZIP)", systemImage: "square.and.arrow.up")
+            }
+            .disabled(isWorking)
+            Button(role: .destructive) {
+                confirmClearStage = 1
+            } label: {
+                Label("Очистить все данные", systemImage: "trash")
+            }
+        }
+        .confirmationDialog("Очистить все данные?", isPresented: Binding(
+            get: { confirmClearStage == 1 }, set: { if !$0 { confirmClearStage = 0 } }
+        ), titleVisibility: .visible) {
+            Button("Продолжить", role: .destructive) { confirmClearStage = 2 }
+            Button("Отмена", role: .cancel) { confirmClearStage = 0 }
+        } message: {
+            Text("Будут удалены все уроки, прогресс и резервные копии.")
+        }
+        .confirmationDialog("Точно удалить всё? Это необратимо.", isPresented: Binding(
+            get: { confirmClearStage == 2 }, set: { if !$0 { confirmClearStage = 0 } }
+        ), titleVisibility: .visible) {
+            Button("Удалить всё", role: .destructive) { clearAll() }
+            Button("Отмена", role: .cancel) { confirmClearStage = 0 }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func createBackup() {
+        isWorking = true
+        Task {
+            let ok = (try? env.backup.createBackup(settings: env.settings.snapshot())) != nil
+            backupSize = env.backup.totalBackupSize()
+            isWorking = false
+            infoMessage = ok ? "Резервная копия создана." : "Не удалось создать копию."
+        }
+    }
+
+    private func exportData() {
+        isWorking = true
+        Task {
+            let url = try? await Task.detached { try BackupService.exportAllData() }.value
+            isWorking = false
+            if let url {
+                exportURL = url
+                showShare = true
+            } else {
+                infoMessage = "Не удалось экспортировать данные."
             }
         }
     }
 
-    private func byteString(_ bytes: Int) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+    private func clearAll() {
+        confirmClearStage = 0
+        env.deleteAllData()
+        backupSize = env.backup.totalBackupSize()
+        infoMessage = "Все данные удалены."
     }
 }
 

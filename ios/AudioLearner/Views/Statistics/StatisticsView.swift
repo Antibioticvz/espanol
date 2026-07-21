@@ -1,3 +1,4 @@
+import CoreData
 import SwiftUI
 
 /// Экран 6: статистика (спека §4.8).
@@ -17,8 +18,14 @@ struct StatisticsView: View {
                 }
             }
             .navigationTitle("Статистика")
+            .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)) { _ in
+                vm?.reload()
+            }
         }
-        .task { if vm == nil { vm = StatisticsViewModel(env: env) } }
+        .task {
+            if vm == nil { vm = StatisticsViewModel(env: env) }
+            vm?.reload()
+        }
     }
 
     private func content(_ vm: StatisticsViewModel) -> some View {
@@ -47,10 +54,7 @@ struct StatisticsView: View {
             }
         }
         .sheet(isPresented: $showShare) {
-            if let exportURL {
-                ShareLink(item: exportURL) { Text("Поделиться CSV") }
-                    .presentationDetents([.medium])
-            }
+            if let exportURL { ShareSheet(items: [exportURL]) }
         }
     }
 
@@ -58,8 +62,8 @@ struct StatisticsView: View {
         let s = vm.summary
         return Section("Общие показатели") {
             statRow("Сессий завершено", String(s.completedSessions))
-            statRow("Всего минут", String(s.totalMinutes))
-            statRow("Средняя сессия", "\(s.averageSessionMinutes) мин")
+            statRow("Всего часов обучения", Format.hoursLearned(seconds: vm.totalSeconds))
+            statRow("Средняя сессия", Format.minuteCount(s.averageSessionMinutes))
         }
     }
 
@@ -91,7 +95,7 @@ struct StatisticsView: View {
                         Text(Format.percent(row.percent)).font(.caption).foregroundStyle(.secondary)
                     }
                     ProgressBarView(value: row.percent, height: 6)
-                    Text("Выучено: \(row.mastered) / \(row.total) · Сессий: \(row.sessions)")
+                    Text("Выучено: \(row.mastered) / \(row.total) · \(Format.sessionCount(row.sessions))")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 2)
@@ -100,12 +104,11 @@ struct StatisticsView: View {
     }
 
     private func dueWordsSection(_ vm: StatisticsViewModel) -> some View {
-        let words = vm.dueWords()
-        return Section("Слова к повтору") {
-            if words.isEmpty {
+        Section("Слова к повтору") {
+            if vm.dueWords.isEmpty {
                 Text("Всё повторено — отлично!").foregroundStyle(.secondary)
             }
-            ForEach(words.prefix(20)) { word in
+            ForEach(vm.dueWords.prefix(20)) { word in
                 HStack(alignment: .top) {
                     Text(word.urgency.emoji)
                     VStack(alignment: .leading, spacing: 2) {
@@ -113,11 +116,8 @@ struct StatisticsView: View {
                         Text(word.textRu).font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if word.daysSince >= 0 {
-                        Text("\(word.daysSince) дн").font(.caption2).foregroundStyle(.secondary)
-                    } else {
-                        Text("новое").font(.caption2).foregroundStyle(.secondary)
-                    }
+                    Text(word.daysSince >= 0 ? Format.dayCount(word.daysSince) : "новое")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
             }
         }
@@ -132,14 +132,21 @@ struct StatisticsView: View {
     }
 }
 
-/// Календарь-heatmap: недели по столбцам, дни недели по строкам.
+/// Календарь-heatmap: строки = дни недели Пн–Вс с подписями, столбцы = недели (спека §4.8).
 struct CalendarHeatmapView: View {
     var activities: [DayActivity]
     private let weeks = 12
+    private let dayLabels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    private let cellSize: CGFloat = 14
+    private let spacing: CGFloat = 3
+
+    private var calendar: Calendar {
+        var c = Calendar(identifier: .gregorian)
+        c.firstWeekday = 2 // понедельник
+        return c
+    }
 
     private var intensityByDay: [Date: Int] {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.firstWeekday = 2
         var map: [Date: Int] = [:]
         for activity in activities {
             map[calendar.startOfDay(for: activity.day)] = activity.intensity
@@ -148,26 +155,35 @@ struct CalendarHeatmapView: View {
     }
 
     var body: some View {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.firstWeekday = 2
-        let today = calendar.startOfDay(for: Date())
+        let cal = calendar
+        let today = cal.startOfDay(for: Date())
+        let thisWeekStart = cal.dateInterval(of: .weekOfYear, for: today)?.start ?? today
+        let startMonday = cal.date(byAdding: .day, value: -(weeks - 1) * 7, to: thisWeekStart) ?? today
         let map = intensityByDay
 
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 3) {
-                ForEach(0..<weeks, id: \.self) { weekOffset in
-                    VStack(spacing: 3) {
-                        ForEach(0..<7, id: \.self) { weekday in
-                            let daysBack = (weeks - 1 - weekOffset) * 7 + (6 - weekday)
-                            let day = calendar.date(byAdding: .day, value: -daysBack, to: today)!
-                            let intensity = map[calendar.startOfDay(for: day)] ?? 0
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(HeatmapPalette.color(for: intensity))
-                                .frame(width: 14, height: 14)
+        return VStack(alignment: .leading, spacing: 6) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: spacing) {
+                    // Подписи дней недели слева.
+                    VStack(spacing: spacing) {
+                        ForEach(0..<7, id: \.self) { r in
+                            Text(dayLabels[r])
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 22, height: cellSize, alignment: .leading)
+                        }
+                    }
+                    // Столбцы-недели.
+                    ForEach(0..<weeks, id: \.self) { c in
+                        VStack(spacing: spacing) {
+                            ForEach(0..<7, id: \.self) { r in
+                                cell(startMonday: startMonday, week: c, weekday: r, today: today, map: map, cal: cal)
+                            }
                         }
                     }
                 }
             }
+            // Легенда.
             HStack(spacing: 4) {
                 Text("Меньше").font(.caption2).foregroundStyle(.secondary)
                 ForEach(0..<4, id: \.self) { i in
@@ -177,6 +193,18 @@ struct CalendarHeatmapView: View {
                 }
                 Text("Больше").font(.caption2).foregroundStyle(.secondary)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func cell(startMonday: Date, week: Int, weekday: Int, today: Date, map: [Date: Int], cal: Calendar) -> some View {
+        let date = cal.date(byAdding: .day, value: week * 7 + weekday, to: startMonday) ?? startMonday
+        if date > today {
+            Color.clear.frame(width: cellSize, height: cellSize) // будущие дни — пусто
+        } else {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(HeatmapPalette.color(for: map[cal.startOfDay(for: date)] ?? 0))
+                .frame(width: cellSize, height: cellSize)
         }
     }
 }

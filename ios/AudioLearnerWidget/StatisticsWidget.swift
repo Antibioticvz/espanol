@@ -1,7 +1,8 @@
 import WidgetKit
 import SwiftUI
 
-/// Home Screen виджет статистики дня (спека §7.2): минуты, сессии, streak.
+/// Виджет статистики дня (спека §7.2): минуты, сессии, streak.
+/// Поддерживает Home Screen (small/medium) и lock-screen accessory (D-18).
 struct StatisticsWidget: Widget {
     let kind = "AudioLearnerStatisticsWidget"
 
@@ -12,7 +13,7 @@ struct StatisticsWidget: Widget {
         }
         .configurationDisplayName("Audio Learner")
         .description("Статистика обучения за сегодня")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
 
@@ -31,10 +32,21 @@ struct StatsProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<StatsEntry>) -> Void) {
-        let entry = StatsEntry(date: Date(), stats: WidgetSharedStore.read())
-        // Обновляем через час (или по reloadAllTimelines из приложения).
-        let next = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date().addingTimeInterval(3600)
-        completion(Timeline(entries: [entry], policy: .after(next)))
+        let now = Date()
+        let stats = WidgetSharedStore.read()
+        var entries = [StatsEntry(date: now, stats: stats)]
+
+        // Вторая запись на начало следующего дня с нулями: после полуночи «Сегодня»
+        // не должно показывать вчерашние минуты, пока приложение не обновит данные.
+        let calendar = Calendar.current
+        if let nextMidnight = calendar.nextDate(after: now, matching: DateComponents(hour: 0, minute: 0),
+                                                matchingPolicy: .nextTime) {
+            entries.append(StatsEntry(
+                date: nextMidnight,
+                stats: .init(date: nextMidnight, minutes: 0, sessions: 0, streak: stats.streak)
+            ))
+        }
+        completion(Timeline(entries: entries, policy: .atEnd))
     }
 }
 
@@ -43,12 +55,16 @@ struct StatsWidgetView: View {
     @Environment(\.widgetFamily) private var family
 
     var body: some View {
-        if family == .systemSmall {
-            smallView
-        } else {
-            mediumView
+        switch family {
+        case .systemSmall: smallView
+        case .accessoryCircular: circularView
+        case .accessoryRectangular: rectangularView
+        case .accessoryInline: inlineView
+        default: mediumView
         }
     }
+
+    private var s: WidgetSharedStore.DailyStats { entry.stats }
 
     private var smallView: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -56,11 +72,11 @@ struct StatsWidgetView: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
             Spacer()
-            metric(value: "\(entry.stats.minutes)", label: "минут сегодня")
-            metric(value: "\(entry.stats.sessions)", label: "сессий")
+            metric(value: "\(s.minutes)", label: Format.pluralRu(s.minutes, one: "минута", few: "минуты", many: "минут"))
+            metric(value: "\(s.sessions)", label: Format.pluralRu(s.sessions, one: "сессия", few: "сессии", many: "сессий"))
             HStack(spacing: 4) {
                 Text("🔥").font(.caption)
-                Text("\(entry.stats.streak) дн").font(.caption.weight(.semibold))
+                Text(Format.dayCount(s.streak)).font(.caption.weight(.semibold))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -74,17 +90,37 @@ struct StatsWidgetView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text("Сегодня").font(.headline)
-                Text("\(entry.stats.minutes) минут · \(entry.stats.sessions) сессий")
+                Text("\(Format.minuteCount(s.minutes)) · \(Format.sessionCount(s.sessions))")
                     .font(.subheadline).foregroundStyle(.secondary)
             }
             Spacer()
             VStack(spacing: 4) {
                 Text("🔥").font(.title)
-                Text("\(entry.stats.streak)").font(.title.weight(.bold))
-                Text("дней подряд").font(.caption2).foregroundStyle(.secondary)
+                Text("\(s.streak)").font(.title.weight(.bold))
+                Text("подряд").font(.caption2).foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    private var circularView: some View {
+        VStack(spacing: 0) {
+            Text("🔥").font(.caption2)
+            Text("\(s.streak)").font(.headline)
+            Text("дн").font(.system(size: 9))
+        }
+    }
+
+    private var rectangularView: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("Audio Learner").font(.caption2.weight(.semibold))
+            Text("\(Format.minuteCount(s.minutes)) · \(Format.sessionCount(s.sessions))").font(.caption2)
+            Text("🔥 \(Format.dayCount(s.streak))").font(.caption2)
+        }
+    }
+
+    private var inlineView: some View {
+        Text("🔥 \(Format.dayCount(s.streak)) · \(Format.minuteCount(s.minutes))")
     }
 
     private func metric(value: String, label: String) -> some View {

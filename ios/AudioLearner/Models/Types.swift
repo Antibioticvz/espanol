@@ -56,7 +56,7 @@ enum PlaybackMode: String, CaseIterable, Codable, Identifiable {
     var titleRu: String {
         switch self {
         case .once: return "Один раз"
-        case .loopPhrase: return "Цикл фразы"
+        case .loopPhrase: return "Цикл фраз"
         case .cycleSession: return "Цикл сессии"
         }
     }

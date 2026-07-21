@@ -46,7 +46,7 @@ struct SessionLessonPickerView: View {
             } else {
                 List(lessons, id: \.objectID) { lesson in
                     Button {
-                        env.sessionFlow.begin(with: lesson, settings: env.settings)
+                        env.startSession(for: lesson)
                     } label: {
                         HStack {
                             VStack(alignment: .leading) {

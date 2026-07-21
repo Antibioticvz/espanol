@@ -36,57 +36,43 @@ struct LessonStatsRow: Identifiable {
 }
 
 /// Экран статистики: периоды, сводка, streak, heatmap, слова к повтору, экспорт (спека §4.8).
+/// Данные считаются в reload() (один проход по базе) и кэшируются — body не делает выборок.
 @MainActor
 @Observable
 final class StatisticsViewModel {
     @ObservationIgnored let env: AppEnvironment
-    var period: StatsPeriod = .all
+
+    var period: StatsPeriod = .all {
+        didSet { if oldValue != period { reload() } }
+    }
+
+    // Кэш результатов (пересчитывается в reload()).
+    private(set) var summary = StatisticsSummary()
+    private(set) var heatmap: [DayActivity] = []
+    private(set) var lessonRows: [LessonStatsRow] = []
+    private(set) var dueWords: [DueWord] = []
+    private(set) var totalSeconds = 0
 
     init(env: AppEnvironment) {
         self.env = env
     }
 
-    private func allSessions() -> [LearningSession] {
-        (try? env.viewContext.fetch(LearningSession.fetchRequest())) ?? []
-    }
+    /// Пересчитывает все секции. Вызывать onAppear и по NSManagedObjectContextDidSave.
+    func reload(now: Date = Date()) {
+        let allSessions = (try? env.viewContext.fetch(LearningSession.fetchRequest())) ?? []
+        let lessons = (try? env.repository.allLessons()) ?? []
+        let stats = env.statistics
 
-    private func allLessons() -> [Lesson] {
-        (try? env.repository.allLessons()) ?? []
-    }
+        let periodSessions = filterByPeriod(allSessions, now: now)
+        var s = stats.summary(sessions: periodSessions, now: now)
+        s.currentStreak = stats.currentStreak(sessions: allSessions, now: now)
+        s.bestStreak = stats.bestStreak(sessions: allSessions)
+        summary = s
+        totalSeconds = stats.completed(periodSessions).reduce(0) { $0 + Int($1.actualDurationSeconds) }
 
-    /// Сессии, попадающие в выбранный период.
-    func periodSessions(now: Date = Date()) -> [LearningSession] {
-        let calendar = Calendar.current
-        let sessions = allSessions().filter { $0.completedAt != nil }
-        switch period {
-        case .all:
-            return sessions
-        case .today:
-            return sessions.filter { calendar.isDate($0.completedAt!, inSameDayAs: now) }
-        case .week:
-            let start = calendar.date(byAdding: .day, value: -7, to: now)!
-            return sessions.filter { $0.completedAt! >= start }
-        case .month:
-            let start = calendar.date(byAdding: .month, value: -1, to: now)!
-            return sessions.filter { $0.completedAt! >= start }
-        }
-    }
+        heatmap = stats.heatmap(sessions: allSessions)
 
-    var summary: StatisticsSummary {
-        // streak считаем по всей истории, остальные показатели — по периоду.
-        var s = env.statistics.summary(sessions: periodSessions())
-        let all = allSessions()
-        s.currentStreak = env.statistics.currentStreak(sessions: all)
-        s.bestStreak = env.statistics.bestStreak(sessions: all)
-        return s
-    }
-
-    var heatmap: [DayActivity] {
-        env.statistics.heatmap(sessions: allSessions())
-    }
-
-    var lessonRows: [LessonStatsRow] {
-        allLessons().map { lesson in
+        lessonRows = lessons.map { lesson in
             let learnable = lesson.allLearnablePhrases
             let mastered = learnable.filter { $0.stateEnum == .mastered }.count
             return LessonStatsRow(
@@ -99,20 +85,32 @@ final class StatisticsViewModel {
             )
         }
         .sorted { $0.topicNumber < $1.topicNumber }
+
+        dueWords = computeDueWords(lessons: lessons, now: now)
     }
 
-    /// Слова/фразы к повтору, сгруппированные по срочности.
-    func dueWords(now: Date = Date()) -> [DueWord] {
+    private func filterByPeriod(_ sessions: [LearningSession], now: Date) -> [LearningSession] {
+        let calendar = Calendar.current
+        let completed = sessions.filter { $0.completedAt != nil }
+        switch period {
+        case .all: return completed
+        case .today: return completed.filter { calendar.isDate($0.completedAt!, inSameDayAs: now) }
+        case .week:
+            let start = calendar.date(byAdding: .day, value: -7, to: now)!
+            return completed.filter { $0.completedAt! >= start }
+        case .month:
+            let start = calendar.date(byAdding: .month, value: -1, to: now)!
+            return completed.filter { $0.completedAt! >= start }
+        }
+    }
+
+    private func computeDueWords(lessons: [Lesson], now: Date) -> [DueWord] {
         var result: [DueWord] = []
-        for lesson in allLessons() {
+        for lesson in lessons {
             for phrase in env.srs.recommendedPhrases(in: lesson, now: now) {
                 let urgency = env.srs.urgency(for: phrase, now: now)
-                let days: Int
-                if let last = phrase.lastReviewDate {
-                    days = Calendar.current.dateComponents([.day], from: last, to: now).day ?? 0
-                } else {
-                    days = -1
-                }
+                let days = phrase.lastReviewDate
+                    .map { Calendar.current.dateComponents([.day], from: $0, to: now).day ?? 0 } ?? -1
                 result.append(DueWord(
                     id: phrase.phraseId,
                     textEs: phrase.textEs,
@@ -123,13 +121,12 @@ final class StatisticsViewModel {
             }
         }
         let order: [ReviewUrgency] = [.urgent, .soon, .normal]
-        return result.sorted { lhs, rhs in
-            (order.firstIndex(of: lhs.urgency) ?? 9) < (order.firstIndex(of: rhs.urgency) ?? 9)
-        }
+        return result.sorted { (order.firstIndex(of: $0.urgency) ?? 9) < (order.firstIndex(of: $1.urgency) ?? 9) }
     }
 
     func exportCSV() -> URL? {
-        let csv = env.statistics.activityCSV(sessions: allSessions())
+        let allSessions = (try? env.viewContext.fetch(LearningSession.fetchRequest())) ?? []
+        let csv = env.statistics.activityCSV(sessions: allSessions)
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return try? env.statistics.writeCSV(csv, filename: "stats_\(formatter.string(from: Date())).csv")

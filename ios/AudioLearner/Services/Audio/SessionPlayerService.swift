@@ -38,6 +38,11 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         didSet { player?.rate = Float(speed) }
     }
 
+    /// Громкость воспроизведения речи (0…1), применяется на лету.
+    var volume: Double = 1.0 {
+        didSet { player?.volume = Float(volume) }
+    }
+
     // MARK: - Callbacks (не наблюдаются; вызываются на main)
     @ObservationIgnored var onPhraseCompleted: (@MainActor (String) -> Void)?
     @ObservationIgnored var onSessionFinished: (@MainActor () -> Void)?
@@ -210,6 +215,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
             let newPlayer = try AVAudioPlayer(contentsOf: url)
             newPlayer.enableRate = true
             newPlayer.rate = Float(speed)
+            newPlayer.volume = Float(volume)
             newPlayer.delegate = self
             newPlayer.prepareToPlay()
             player = newPlayer

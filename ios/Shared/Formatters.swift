@@ -56,6 +56,29 @@ enum Format {
         "\(count) \(pluralRu(count, one: "сессия", few: "сессии", many: "сессий"))"
     }
 
+    static func minuteCount(_ count: Int) -> String {
+        "\(count) \(pluralRu(count, one: "минута", few: "минуты", many: "минут"))"
+    }
+
+    static func wordCount(_ count: Int) -> String {
+        "\(count) \(pluralRu(count, one: "слово", few: "слова", many: "слов"))"
+    }
+
+    /// «21.5 часа» — часы обучения из секунд (одно число, с десятыми).
+    static func hoursLearned(seconds: Int) -> String {
+        let hours = Double(seconds) / 3600.0
+        let rounded = (hours * 10).rounded() / 10
+        let whole = Int(rounded)
+        let word: String
+        if rounded == Double(whole) {
+            word = pluralRu(whole, one: "час", few: "часа", many: "часов")
+        } else {
+            word = "часа" // дробное → родительный ед.
+        }
+        let text = rounded == Double(whole) ? String(whole) : String(format: "%.1f", rounded)
+        return "\(text) \(word)"
+    }
+
     /// Выбор формы русского множественного числа.
     static func pluralRu(_ count: Int, one: String, few: String, many: String) -> String {
         let mod100 = abs(count) % 100

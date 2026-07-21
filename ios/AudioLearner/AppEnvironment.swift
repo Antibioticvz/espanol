@@ -17,6 +17,10 @@ final class AppEnvironment {
     let backup: BackupService
 
     @ObservationIgnored let audioSession = AudioSessionManager.shared
+    /// Единый сервис lock screen на процесс (иначе копятся зомби remote-таргеты).
+    @ObservationIgnored let lockScreen = LockScreenService()
+    /// ObjectID незавершённой сессии (для отмены при старте новой).
+    @ObservationIgnored var activeSessionID: NSManagedObjectID?
 
     /// Активная вкладка (для перехода «Играть» из списка уроков в Сессию).
     var selectedTab: AppTab = .lessons
@@ -44,15 +48,55 @@ final class AppEnvironment {
     func onLaunch() {
         AppPaths.ensureDirectories()
         FileImportService.sweepTempImports() // подметаем осиротевшие папки импорта
+        cleanupOrphanSessions()              // сессии, брошенные из-за kill приложения
         audioSession.activate()
         backup.createDailyBackupIfNeeded(settings: settings.snapshot())
         refreshWidgetStats()
     }
 
-    /// Начинает сессию для урока: переключает вкладку и открывает выбор фраз.
+    /// Начинает сессию для урока: гасит прежнюю сессию, переключает вкладку и открывает выбор фраз.
     func startSession(for lesson: Lesson) {
+        endActiveSession(abandoned: true)
         sessionFlow.begin(with: lesson, settings: settings)
         selectedTab = .session
+    }
+
+    /// Останавливает активное воспроизведение, очищает lock screen и, если незавершённая
+    /// сессия брошена, удаляет её запись (не засчитывается в историю).
+    func endActiveSession(abandoned: Bool) {
+        sessionFlow.player.reset()
+        lockScreen.clear()
+        if abandoned, let id = activeSessionID,
+           let session = try? viewContext.existingObject(with: id) as? LearningSession,
+           session.completedAt == nil {
+            viewContext.delete(session)
+            try? viewContext.save()
+        }
+        activeSessionID = nil
+    }
+
+    /// Полностью очищает данные приложения: CoreData + файлы уроков/бэкапов (спека §4.9).
+    func deleteAllData() {
+        endActiveSession(abandoned: true)
+        for lesson in (try? repository.allLessons()) ?? [] { viewContext.delete(lesson) }
+        for session in (try? viewContext.fetch(LearningSession.fetchRequest())) ?? [] {
+            viewContext.delete(session)
+        }
+        try? viewContext.save()
+        try? FileManager.default.removeItem(at: AppPaths.lessonsDirectory)
+        try? FileManager.default.removeItem(at: AppPaths.backupsDirectory)
+        AppPaths.ensureDirectories()
+        refreshWidgetStats()
+    }
+
+    /// Удаляет незавершённые сессии (completedAt == nil), оставшиеся после аварийного выхода.
+    func cleanupOrphanSessions() {
+        let request = LearningSession.fetchRequest()
+        request.predicate = NSPredicate(format: "completedAt == nil")
+        let orphans = (try? viewContext.fetch(request)) ?? []
+        guard !orphans.isEmpty else { return }
+        for session in orphans { viewContext.delete(session) }
+        try? viewContext.save()
     }
 
     // MARK: - Widget stats

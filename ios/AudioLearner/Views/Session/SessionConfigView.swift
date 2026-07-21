@@ -31,7 +31,7 @@ struct SessionConfigView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("Пауза между элементами") {
+            Section("Пауза между повторениями") {
                 Stepper(value: $flow.config.pauseSeconds, in: 0...15, step: 1) {
                     Text("Пауза: \(Int(flow.config.pauseSeconds)) сек")
                 }

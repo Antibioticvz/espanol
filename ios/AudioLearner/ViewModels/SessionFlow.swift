@@ -40,6 +40,8 @@ final class SessionFlow {
     @ObservationIgnored let player = SessionPlayerService()
 
     func begin(with lesson: Lesson, settings: AppSettings) {
+        // Защита: любое старое воспроизведение останавливается перед новым выбором.
+        player.reset()
         self.lesson = lesson
         self.lessonObjectID = lesson.topicId
         self.selectedPhraseIds = lesson.allLearnablePhrases.map(\.phraseId)

@@ -6,10 +6,15 @@ final class LockScreenService {
 
     var onPlay: (() -> Void)?
     var onPause: (() -> Void)?
+    var onToggle: (() -> Void)?
     var onNext: (() -> Void)?
     var onPrevious: (() -> Void)?
 
     private var commandsInstalled = false
+
+    deinit {
+        removeRemoteCommands()
+    }
 
     // MARK: - Remote commands
 
@@ -24,8 +29,9 @@ final class LockScreenService {
         center.pauseCommand.addTarget { [weak self] _ in
             self?.onPause?(); return .success
         }
+        // Отдельный toggle (наушники/AirPods): пауза↔плей, а не только play.
         center.togglePlayPauseCommand.addTarget { [weak self] _ in
-            self?.onPlay?(); return .success
+            self?.onToggle?(); return .success
         }
         center.nextTrackCommand.isEnabled = true
         center.nextTrackCommand.addTarget { [weak self] _ in
@@ -35,6 +41,19 @@ final class LockScreenService {
         center.previousTrackCommand.addTarget { [weak self] _ in
             self?.onPrevious?(); return .success
         }
+    }
+
+    /// Снимает добавленные таргеты (иначе на shared-центре копятся зомби-таргеты).
+    func removeRemoteCommands() {
+        guard commandsInstalled else { return }
+        let center = MPRemoteCommandCenter.shared()
+        // Замыкания-таргеты возвращают непрозрачные токены; убираем все таргеты команды.
+        center.playCommand.removeTarget(nil)
+        center.pauseCommand.removeTarget(nil)
+        center.togglePlayPauseCommand.removeTarget(nil)
+        center.nextTrackCommand.removeTarget(nil)
+        center.previousTrackCommand.removeTarget(nil)
+        commandsInstalled = false
     }
 
     // MARK: - Now Playing

@@ -1,5 +1,6 @@
 import CoreData
 import Foundation
+import ZIPFoundation
 
 /// Резервное копирование прогресса и настроек (спека §4.9, §12.1).
 /// Экспорт состояний фраз/прогресса/настроек в JSON, ротация 7 файлов, восстановление.
@@ -109,6 +110,24 @@ final class BackupService {
             return nil
         }
         return try? createBackup(settings: settings, now: now)
+    }
+
+    /// Дата последней резервной копии (для отображения в настройках).
+    var lastBackupDate: Date? {
+        defaults.object(forKey: SettingsKeys.lastBackupDate) as? Date
+    }
+
+    /// Экспорт всех данных приложения одним ZIP (уроки + бэкапы). Пишется во временный
+    /// каталог (вне AppLearner/, чтобы не архивировать сам себя), возвращает URL для share.
+    /// Статический (только ФС, без CoreData) — безопасно вызывать в фоне.
+    static func exportAllData(now: Date = Date()) throws -> URL {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        let dest = FileManager.default.temporaryDirectory
+            .appendingPathComponent("audiolearner_export_\(formatter.string(from: now)).zip")
+        try? FileManager.default.removeItem(at: dest)
+        try FileManager.default.zipItem(at: AppPaths.appRoot, to: dest, shouldKeepParent: true)
+        return dest
     }
 
     // MARK: - List / size
