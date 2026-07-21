@@ -183,6 +183,8 @@ export interface TestSnippetResult {
   /** Фактически озвученные символы — основа расчёта реальной стоимости (не оценки). */
   characters: number
   costUsd: number
+  /** v1.2 (D-23) — см. EstimateCostResult-соседей: заметка о нормализации громкости, если есть что сообщить. */
+  normalizationNote?: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -224,6 +226,38 @@ export interface ExportAnkiResult {
 }
 
 // ---------------------------------------------------------------------------
+// saveApiKey / getApiKeyStatus / clearApiKey — v1.2 (D-23), ДОПОЛНЕНИЕ к контракту.
+//
+// До этого плоский window.combineApi передавал apiKey ЯВНО в каждом релевантном вызове
+// (testConnection/listVoices/testSnippet/startGeneration) из React-состояния renderer'а, которое
+// никогда не персистилось — пользователь вводил ключ заново при каждом запуске приложения, хотя
+// main-процесс уже имеет шифрованное хранилище (Electron safeStorage, см.
+// core/settings/settings.service.ts, используется вложенным window.combine.settings.*). Эти три
+// операции ЗАМЫКАЮТ существующее хранилище на плоский контракт: экран настроек сохраняет ключ
+// сюда (main шифрует и пишет на диск), при следующем запуске показывает статус (НЕ сам ключ), и
+// операции выше уже умеют использовать сохранённый ключ, если явный apiKey в вызове отсутствует/
+// пуст (см. main/ipc-handlers.ts — это было частью стыковки моста, D-22). Ключ, таким образом,
+// НИКОГДА не возвращается из main в renderer — обратно едет только статус.
+// ---------------------------------------------------------------------------
+
+/** Структурно повторяет core/settings/settings.service.ts#ApiKeyStatus — см. пояснение у VoiceOption
+ * в шапке файла про то, почему тип продублирован локально, а не импортирован из core/settings/**. */
+export type ApiKeyStatusValue = 'none' | 'ok' | 'corrupted' | 'encryption-unavailable'
+
+export interface ApiKeyStatusResult {
+  status: ApiKeyStatusValue
+  /** Electron safeStorage в принципе доступен на этой платформе/сборке (см. isEncryptionAvailable()). */
+  encryptionAvailable: boolean
+}
+
+// ---------------------------------------------------------------------------
+// checkFfmpegAvailable — v1.2 (D-23), ДОПОЛНЕНИЕ к контракту.
+// Экран настроек показывает «нормализация недоступна: установите ffmpeg», когда нормализация
+// включена, provider=elevenlabs, а ffmpeg не найден в PATH (см. core/util/ffmpeg.ts на main-стороне —
+// renderer сам определить наличие ffmpeg не может, у него нет доступа к child_process).
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Полный контракт
 // ---------------------------------------------------------------------------
 
@@ -233,6 +267,12 @@ export interface CombineIpcApi {
 
   getSettings(): Promise<AppSettings>
   saveSettings(settings: AppSettings): Promise<void>
+
+  /** v1.2 (D-23): шифрованное сохранение ключа на main-стороне (Electron safeStorage) — ключ не хранится в AppSettings. */
+  saveApiKey(apiKey: string): Promise<void>
+  /** Статус сохранённого ключа (НИКОГДА не сам ключ) — для UI-бейджа «ключ сохранён»/«ключ не задан»/... */
+  getApiKeyStatus(): Promise<ApiKeyStatusResult>
+  clearApiKey(): Promise<void>
 
   testConnection(input: TestConnectionInput): Promise<TestConnectionResult>
   listVoices(input: ListVoicesInput): Promise<VoiceOption[]>
@@ -260,4 +300,7 @@ export interface CombineIpcApi {
 
   /** v1.1: экспорт урока в Anki .apkg — см. комментарий у ExportAnkiInput выше. */
   exportAnki(input: ExportAnkiInput): Promise<ExportAnkiResult>
+
+  /** v1.2 (D-23): main определяет наличие ffmpeg (renderer не имеет доступа к child_process). */
+  checkFfmpegAvailable(): Promise<boolean>
 }

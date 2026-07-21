@@ -19,6 +19,7 @@ import type { AppSettings } from '../../core/types/settings'
 import type { DurationPair, ItemStatus, LessonJson } from '../../core/types/lesson-json'
 import type { GenerationProgressEvent, QueueRunState } from '../../core/types/generation'
 import type {
+  ApiKeyStatusResult,
   CombineIpcApi,
   EstimateCostInput,
   EstimateCostResult,
@@ -81,6 +82,57 @@ function persistSettings(settings: AppSettings): void {
   } catch {
     // квота/приватный режим — игнорируем, это лишь мок
   }
+}
+
+// ---------------------------------------------------------------------------
+// API-ключ (v1.2, D-23) — персистентность через localStorage (переживает reload dev:web, как
+// currentSettings выше). getApiKeyStatus() отдаёт ТОЛЬКО статус, никогда сам ключ — так же, как
+// main-процесс никогда не возвращает ключ обратно в renderer (см. shared/ipc.ts).
+// ---------------------------------------------------------------------------
+
+const API_KEY_STORAGE_KEY = 'combine:mock:apiKey'
+
+function loadSavedApiKey(): string | null {
+  try {
+    return typeof localStorage !== 'undefined' ? localStorage.getItem(API_KEY_STORAGE_KEY) : null
+  } catch {
+    return null
+  }
+}
+
+/** Явный ключ из вызова побеждает (пользователь ещё печатает, не сохранил) — иначе сохранённый (main-fallback). */
+function resolveMockApiKey(explicit: string | null): string | null {
+  return explicit && explicit.trim().length > 0 ? explicit : loadSavedApiKey()
+}
+
+async function saveApiKey(apiKey: string): Promise<void> {
+  await delay(80)
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(API_KEY_STORAGE_KEY, apiKey)
+  } catch {
+    // квота/приватный режим — игнорируем, это лишь мок
+  }
+}
+
+async function getApiKeyStatus(): Promise<ApiKeyStatusResult> {
+  await delay(30)
+  return { status: loadSavedApiKey() ? 'ok' : 'none', encryptionAvailable: true }
+}
+
+async function clearApiKey(): Promise<void> {
+  await delay(30)
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(API_KEY_STORAGE_KEY)
+  } catch {
+    // игнорируем
+  }
+}
+
+async function checkFfmpegAvailable(): Promise<boolean> {
+  await delay(30)
+  // dev:web не имеет доступа к child_process/PATH — условно "доступен", чтобы UI можно было
+  // проверить в позитивном сценарии; реальная проверка — только в Electron (main/ipc-handlers.ts).
+  return true
 }
 
 // ---------------------------------------------------------------------------
@@ -343,8 +395,8 @@ async function testConnection(input: TestConnectionInput): Promise<TestConnectio
       voiceCount: voicesForProvider('mock_say').length
     }
   }
-  const key = (input.apiKey ?? '').trim()
-  if (!key) return { ok: false, message: 'Введите API-ключ ElevenLabs.' }
+  const key = (resolveMockApiKey(input.apiKey) ?? '').trim()
+  if (!key) return { ok: false, message: 'Введите API-ключ ElevenLabs (или сохраните его в настройках).' }
   if (key.toLowerCase() === 'invalid') return { ok: false, message: 'Неверный API-ключ (401 Unauthorized).' }
   return { ok: true, message: 'Подключение активно.', voiceCount: voicesForProvider('elevenlabs').length }
 }
@@ -368,6 +420,9 @@ async function estimateCost(input: EstimateCostInput): Promise<EstimateCostResul
 
 async function startGeneration(input: StartGenerationInput): Promise<StartGenerationResult> {
   await delay(150)
+  if (input.settings.provider === 'elevenlabs' && !resolveMockApiKey(input.apiKey)) {
+    throw new Error('API-ключ ElevenLabs не задан — введите ключ или сохраните его в настройках.')
+  }
   const lessonJson = buildMockLessonJson(input.lesson, {
     provider: input.settings.provider,
     model: input.settings.model,
@@ -467,6 +522,9 @@ async function openLessonFolder({ topicId }: GenerationRunRef): Promise<void> {
 
 async function testSnippet(input: TestSnippetInput): Promise<TestSnippetResult> {
   await delay(500)
+  if (input.provider === 'elevenlabs' && !resolveMockApiKey(input.apiKey)) {
+    throw new Error('API-ключ ElevenLabs не задан — введите ключ или сохраните его в настройках.')
+  }
   const durationMs = beepDurationMs(input.text)
   const price = currentSettings.pricePerThousandChars[input.model] ?? 0
   const characters = input.text.length
@@ -519,6 +577,9 @@ export const mockAdapter: CombineIpcApi = {
   parseText,
   getSettings,
   saveSettings,
+  saveApiKey,
+  getApiKeyStatus,
+  clearApiKey,
   testConnection,
   listVoices,
   estimateCost,
@@ -535,5 +596,6 @@ export const mockAdapter: CombineIpcApi = {
   openLessonFolder,
   testSnippet,
   getPhraseAudio,
-  exportAnki
+  exportAnki,
+  checkFfmpegAvailable
 }
