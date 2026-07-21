@@ -31,6 +31,10 @@ public final class Lesson: NSManagedObject {
     }
 }
 
+extension Lesson: Identifiable {
+    public var id: String { topicId }
+}
+
 extension Lesson {
     /// Блоки урока, упорядоченные по orderIndex.
     var orderedBlocks: [LessonBlock] {
