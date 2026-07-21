@@ -12,6 +12,7 @@ import {
 import { GenerationQueue } from '../core/queue/generation-queue'
 import type { GenerationProgressEvent, GenerationTask, QueueConfig } from '../core/types/generation'
 import { isGroupsBlockJson, type ItemStatus, type LessonJson, type VoiceRef } from '../core/types/lesson-json'
+import type { ParsedLesson } from '../core/types/parsed-lesson'
 import type { AppSettings } from '../core/types/settings'
 import { CostCalculator } from '../core/cost/cost-calculator'
 import { getAppContext } from './services-bootstrap'
@@ -19,6 +20,29 @@ import { getAppContext } from './services-bootstrap'
 export interface StartGenerationParams {
   inputText: string
   settings: AppSettings
+  /**
+   * Явный (возможно ещё НЕ сохранённый через settings.setApiKey) ключ ElevenLabs — см.
+   * src/shared/ipc.ts#StartGenerationInput. Необязателен и не используется существующим
+   * вложенным `window.combine.generation.start` (там ключ всегда берётся из secure storage);
+   * плоский `window.combineApi.startGeneration` (см. ipc-handlers.ts, D-22 в docs/DECISIONS.md
+   * — координация моста) передаёт его явно, потому что renderer хранит ключ только в состоянии
+   * формы до нажатия «Сохранить».
+   */
+  apiKey?: string | null
+}
+
+/** Вариант start() для уже разобранного текста (плоский контракт shared/ipc.ts#startGeneration
+ * получает готовый ParsedLesson, а не сырой текст — renderer уже прогнал parseText() и показал
+ * дерево разбора пользователю до нажатия «Сгенерировать»). */
+export interface StartParsedGenerationParams {
+  lesson: ParsedLesson
+  settings: AppSettings
+  apiKey?: string | null
+}
+
+export interface StartGenerationOutcome {
+  topicId: string
+  lesson: LessonJson
 }
 
 export interface RegenerateParams {
@@ -80,21 +104,38 @@ export class GenerationSession {
   }
 
   /** Новая генерация из сырого текста (импорт) — резюмирует, если lesson.json для topic_id уже есть. */
-  async start(params: StartGenerationParams, onProgress: (event: GenerationProgressEvent) => void): Promise<{ topicId: string }> {
+  async start(params: StartGenerationParams, onProgress: (event: GenerationProgressEvent) => void): Promise<StartGenerationOutcome> {
     if (this.isActive()) {
       throw new Error('Генерация уже выполняется — дождитесь завершения, поставьте на паузу или отмените текущую.')
     }
-    const { settings } = params
-    const { fileService } = getAppContext()
-
     const parseResult = new ParserService().parse(params.inputText)
     if (!parseResult.lesson || parseResult.errors.length > 0) {
       const details = parseResult.errors.map((e) => (e.line !== null ? `строка ${e.line}: ${e.message}` : e.message)).join('; ')
       throw new Error(`Ошибки парсера (${parseResult.errors.length}): ${details}`)
     }
-    const lesson = parseResult.lesson
+    return this.startCommon(parseResult.lesson, params.settings, params.apiKey ?? null, onProgress)
+  }
 
-    const provider = await this.createProvider(settings.provider, settings.queue.maxRetries)
+  /** Вариант start() для уже разобранного (renderer уже вызвал parseText()) урока — см. StartParsedGenerationParams. */
+  async startParsed(
+    params: StartParsedGenerationParams,
+    onProgress: (event: GenerationProgressEvent) => void
+  ): Promise<StartGenerationOutcome> {
+    if (this.isActive()) {
+      throw new Error('Генерация уже выполняется — дождитесь завершения, поставьте на паузу или отмените текущую.')
+    }
+    return this.startCommon(params.lesson, params.settings, params.apiKey ?? null, onProgress)
+  }
+
+  private async startCommon(
+    lesson: ParsedLesson,
+    settings: AppSettings,
+    apiKey: string | null,
+    onProgress: (event: GenerationProgressEvent) => void
+  ): Promise<StartGenerationOutcome> {
+    const { fileService } = getAppContext()
+
+    const provider = await this.createProvider(settings.provider, settings.queue.maxRetries, apiKey)
     const { voiceEs, voiceRu } = await this.resolveVoices(provider, settings.voiceEs?.id, settings.voiceRu?.id)
 
     const topicId = lesson.topicId
@@ -134,11 +175,14 @@ export class GenerationSession {
       onProgress
     })
 
-    return { topicId }
+    return { topicId, lesson: lessonJson }
   }
 
   /** «Переделать всё» / «Переделать only failed» из библиотеки — использует config уже сохранённый в lesson.json. */
-  async startRegenerate(params: RegenerateParams, onProgress: (event: GenerationProgressEvent) => void): Promise<void> {
+  async startRegenerate(
+    params: RegenerateParams,
+    onProgress: (event: GenerationProgressEvent) => void
+  ): Promise<StartGenerationOutcome> {
     if (this.isActive()) {
       throw new Error('Генерация уже выполняется — дождитесь завершения, поставьте на паузу или отмените текущую.')
     }
@@ -170,6 +214,8 @@ export class GenerationSession {
       pricing,
       onProgress
     })
+
+    return { topicId: params.topicId, lesson: lessonJson }
   }
 
   pause(): void {
@@ -194,9 +240,17 @@ export class GenerationSession {
     this.queue?.cancel()
   }
 
-  private async createProvider(providerName: 'mock_say' | 'elevenlabs', maxRetries: number): Promise<TTSProvider> {
+  /**
+   * explicitApiKey (не пустая строка) побеждает — так работает StartParsedGenerationParams.apiKey
+   * (ключ ещё не сохранён, но введён в форме настроек). Иначе — обычный путь: ключ из secure storage.
+   */
+  private async createProvider(
+    providerName: 'mock_say' | 'elevenlabs',
+    maxRetries: number,
+    explicitApiKey?: string | null
+  ): Promise<TTSProvider> {
     if (providerName === 'mock_say') return new MockSayService()
-    const apiKey = await getAppContext().settingsService.getApiKey()
+    const apiKey = explicitApiKey && explicitApiKey.trim().length > 0 ? explicitApiKey : await getAppContext().settingsService.getApiKey()
     if (!apiKey) throw new Error('API-ключ ElevenLabs не задан — откройте настройки и введите ключ.')
     return new ElevenLabsService({ apiKey, maxRetries })
   }

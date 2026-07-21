@@ -16,6 +16,12 @@ export interface TestGenerationParams {
   similarityBoost?: number | null
   seed?: number | null
   pricePerThousandChars: PricingTable
+  /**
+   * Явный ключ ElevenLabs (см. src/shared/ipc.ts#TestSnippetInput) — используется, если непустой;
+   * иначе (не передан/пустой) — как раньше, читается из secure storage через requireApiKey().
+   * Опционален и обратносовместим: вложенный `window.combine` (combine:test-generate) его не шлёт.
+   */
+  apiKey?: string | null
 }
 
 export interface TestGenerationResult {
@@ -34,7 +40,7 @@ export async function runTestGeneration(params: TestGenerationParams): Promise<T
   const provider =
     params.provider === 'mock_say'
       ? new MockSayService()
-      : new ElevenLabsService({ apiKey: await requireApiKey(), maxRetries: 1 })
+      : new ElevenLabsService({ apiKey: await resolveApiKey(params.apiKey), maxRetries: 1 })
 
   const result = await provider.synthesize({
     text: params.text,
@@ -57,7 +63,8 @@ export async function runTestGeneration(params: TestGenerationParams): Promise<T
   }
 }
 
-async function requireApiKey(): Promise<string> {
+async function resolveApiKey(explicit?: string | null): Promise<string> {
+  if (explicit && explicit.trim().length > 0) return explicit
   const apiKey = await getAppContext().settingsService.getApiKey()
   if (!apiKey) throw new Error('API-ключ ElevenLabs не задан — откройте настройки и введите ключ.')
   return apiKey

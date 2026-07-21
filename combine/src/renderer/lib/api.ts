@@ -9,15 +9,14 @@ import { mockAdapter } from '../adapters/mockAdapter'
  * Проверяем именно наличие моста, а не import.meta.env.DEV — так работает одинаково для dev:web, build-превью
  * в браузере и unit-тестов, без завязки на способ сборки.
  *
- * ИЗВЕСТНОЕ РАСХОЖДЕНИЕ (см. отчёт renderer-агента): фактический preload из feat/combine
- * (src/preload/index.ts) экспонирует мост как `window.combine` с ВЛОЖЕННОЙ структурой методов
- * (settings.get/save, generation.start/pause/..., library.list/delete/...) и другой моделью
- * API-ключа (setApiKey/hasApiKey/clearApiKey вместо apiKey отдельным полем в каждом вызове) —
- * не как плоский `window.combineApi`, предложенный в src/shared/ipc.ts. Это осознанно НЕ
- * исправлено здесь: примирение — самостоятельная задача оркестратора («финальную стыковку
- * каналов сделает оркестратор при merge»), а не косметическое переименование (меняется форма
- * нескольких операций, не только имена). До реконсиляции реальный Electron-бридж просто не
- * находится и используется mockAdapter — предупреждение ниже делает это явным, а не тихим.
+ * СТЫКОВКА (docs/DECISIONS.md D-22): реальный preload (src/preload/index.ts) экспонирует ОБА моста —
+ * исторический вложенный `window.combine` (settings.get/save, generation.start/pause/...,
+ * library.list/delete/...) И плоский `window.combineApi`, реализующий именно CombineIpcApi отсюда,
+ * поверх тех же main-хендлеров (часть — общие каналы, часть — новые combine:api:*, см.
+ * src/main/ipc-handlers.ts). Поэтому в реальном Electron window.combineApi ВСЕГДА присутствует —
+ * ветка ниже с warn() при обнаружении только window.combine остаётся исключительно defensive-кодом
+ * на случай будущей регрессии (напр. preload случайно перестанет регистрировать combineApi), а не
+ * ожидаемым путём выполнения.
  */
 function selectApi(): CombineIpcApi {
   if (typeof window !== 'undefined' && window.combineApi) {
@@ -26,9 +25,9 @@ function selectApi(): CombineIpcApi {
   if (typeof window !== 'undefined' && 'combine' in window) {
     // eslint-disable-next-line no-console
     console.warn(
-      '[lib/api] window.combine обнаружен (реальный preload из feat/combine), но его форма не совпадает ' +
-        'с CombineIpcApi (src/shared/ipc.ts) — ожидались плоские методы на window.combineApi. ' +
-        'Используется mockAdapter, пока каналы не согласованы (см. docs/DECISIONS.md и отчёт при merge).'
+      '[lib/api] window.combine обнаружен, но window.combineApi — нет. Ожидался плоский мост ' +
+        'CombineIpcApi (см. src/preload/index.ts и docs/DECISIONS.md D-22). Используется mockAdapter ' +
+        'как safe fallback — проверьте preload (возможно, устаревшая сборка out/preload).'
     )
   }
   return mockAdapter
