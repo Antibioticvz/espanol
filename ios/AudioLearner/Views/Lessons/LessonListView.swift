@@ -138,13 +138,23 @@ struct LessonListView: View {
 
     private func performDelete(_ lesson: Lesson) {
         // Если удаляем урок идущей сессии — сперва гасим её (иначе крэш на invalidated объекте).
-        if env.sessionFlow.lesson?.objectID == lesson.objectID {
+        // Покрываем и одноурочную, и «Сессию дня» (lesson==nil, но фразы могут быть из этого урока, C14).
+        if isLessonInActiveSession(lesson) {
             env.endActiveSession(abandoned: true)
             env.sessionFlow.reset()
         }
         try? env.repository.delete(lesson)
         env.refreshWidgetStats()
         deleteTarget = nil
+    }
+
+    private func isLessonInActiveSession(_ lesson: Lesson) -> Bool {
+        let flow = env.sessionFlow
+        if flow.lesson?.objectID == lesson.objectID { return true }
+        // «Сессия дня»: проверяем пересечение проигрываемых фраз с фразами удаляемого урока.
+        guard flow.isDailySession else { return false }
+        let lessonPhraseIds = Set(lesson.allLearnablePhrases.map(\.phraseId))
+        return flow.selectedPhraseIds.contains { lessonPhraseIds.contains($0) }
     }
 
     private func beginRename(_ lesson: Lesson) {

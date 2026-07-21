@@ -54,7 +54,13 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
     @ObservationIgnored private var currentSpeedMultiplier: Double = 1.0
 
     /// Эффективная скорость с учётом множителя автоскорости.
-    private var effectiveRate: Float { Float(speed * currentSpeedMultiplier) }
+    var effectiveRate: Float { Float(speed * currentSpeedMultiplier) }
+
+    /// Скорость для Now Playing: во время паузы «трек» идёт в реальном времени (1.0), при остановке 0.
+    var nowPlayingRate: Double {
+        guard isPlaying else { return 0 }
+        return isInPause ? 1.0 : Double(effectiveRate)
+    }
 
     var speed: Double = 1.0 {
         didSet { player?.rate = effectiveRate }
@@ -69,6 +75,14 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
     @ObservationIgnored var onPhraseCompleted: (@MainActor (String) -> Void)?
     @ObservationIgnored var onSessionFinished: (@MainActor () -> Void)?
     @ObservationIgnored var onItemChanged: (@MainActor () -> Void)?
+    /// Вызывается при смене play↔pause (для синхронизации Now Playing/Live Activity из интентов).
+    @ObservationIgnored var onPlaybackStateChanged: (@MainActor () -> Void)?
+
+    /// Фразы, зарегистрированные в SRS за сессию (одна регистрация на фразу; НЕ сбрасывается
+    /// на границе цикла, в отличие от completedPhraseIds для отображения X/N — D-23 fix).
+    @ObservationIgnored private var srsCompletedPhraseIds: Set<String> = []
+    /// Поколение «ноги»: отсекает устаревшие срабатывания pause-таймера.
+    @ObservationIgnored private var legGeneration = 0
 
     // MARK: - Private
     @ObservationIgnored private var player: AVAudioPlayer?
@@ -128,12 +142,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
     func reset() {
         stopTimers()
-        sleepTimer?.invalidate()
-        sleepTimer = nil
-        sleepDeadline = nil
-        sleepPending = false
-        sleepTotalSeconds = 0
-        sleepRemainingSeconds = 0
+        clearSleepTimer()
         player?.stop()
         player = nil
         stopSilence()
@@ -149,6 +158,18 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         currentTime = 0
         currentDuration = 0
         completedPhraseIds = []
+        srsCompletedPhraseIds = []
+        legGeneration += 1
+    }
+
+    /// Полностью сбрасывает sleep-таймер (общее для reset/finishSession).
+    private func clearSleepTimer() {
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        sleepDeadline = nil
+        sleepPending = false
+        sleepTotalSeconds = 0
+        sleepRemainingSeconds = 0
     }
 
     func start() {
@@ -170,6 +191,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
             loadCurrentLeg(autoplay: true)
         }
         startProgressTimer()
+        onPlaybackStateChanged?()
     }
 
     func pause() {
@@ -180,6 +202,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
             silencePlayer?.pause()
         }
         stopProgressTimer()
+        onPlaybackStateChanged?()
     }
 
     func togglePlayPause() {
@@ -202,9 +225,11 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         sleepRemainingSeconds = sleepTotalSeconds
         guard sleepTotalSeconds > 0 else { sleepDeadline = nil; return }
         sleepDeadline = Date().addingTimeInterval(Double(sleepTotalSeconds))
-        sleepTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tickSleep() }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        sleepTimer = timer
     }
 
     private func tickSleep() {
@@ -258,15 +283,15 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
     // MARK: - Navigation
 
-    func nextPhrase(userInitiated: Bool = true) {
-        guard currentPhraseIndex + 1 < phrases.count else {
-            // Последняя фраза — завершаем или зацикливаем.
-            advancePhraseBoundary()
-            return
-        }
+    func skipToNextPhrase() {
+        // Симметрично помечаем текущую фразу завершённой в любом случае (m13).
         markCurrentPhraseCompletedIfNeeded()
-        currentPhraseIndex += 1
-        restartPhraseLegs()
+        if currentPhraseIndex + 1 < phrases.count {
+            currentPhraseIndex += 1
+            restartPhraseLegs()
+        } else {
+            advancePhraseBoundary()
+        }
     }
 
     func previousPhrase() {
@@ -339,10 +364,10 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
                 startProgressTimer()
             }
         } catch {
-            // Файл недоступен — считаем «ногу» завершённой, идём дальше.
+            // Файл недоступен — считаем «ногу» завершённой, идём дальше (асинхронно, m12).
             player = nil
             currentDuration = 0
-            advanceLeg()
+            scheduleAdvance()
         }
     }
 
@@ -354,7 +379,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         pauseRemaining = seconds
         if seconds <= 0 {
             isInPause = false
-            advanceLeg()
+            scheduleAdvance()
             return
         }
         if autoplay && isPlaying {
@@ -367,9 +392,13 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
     private func resumePause() {
         pauseStartedAt = Date()
         pauseTimer?.invalidate()
-        pauseTimer = Timer.scheduledTimer(withTimeInterval: pauseRemaining, repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.pauseFinished() }
+        let gen = legGeneration
+        // .common — иначе таймер молчит во время трекинга ScrollView (m16).
+        let timer = Timer(timeInterval: pauseRemaining, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.pauseFinished(generation: gen) }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        pauseTimer = timer
     }
 
     private func holdPause() {
@@ -381,12 +410,19 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         pauseStartedAt = nil
     }
 
-    private func pauseFinished() {
+    private func pauseFinished(generation: Int) {
+        // Отсекаем устаревшее срабатывание (nextPhrase/новая нога уже сдвинули машину, m10).
+        guard generation == legGeneration, isInPause else { return }
         isInPause = false
         pauseTimer = nil
         pauseStartedAt = nil
         stopSilence()
         advanceLeg()
+    }
+
+    private func scheduleAdvance() {
+        // Асинхронно, чтобы не раскручивать глубокую синхронную рекурсию при битых файлах/нулевой паузе (m12).
+        Task { @MainActor [weak self] in self?.advanceLeg() }
     }
 
     // MARK: - Silence during pauses
@@ -456,14 +492,18 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
     private func markCurrentPhraseCompletedIfNeeded() {
         guard let phrase = currentPhrase else { return }
-        if !completedPhraseIds.contains(phrase.phraseId) {
-            completedPhraseIds.insert(phrase.phraseId)
+        // Отображение X/N: сбрасывается на границе цикла.
+        completedPhraseIds.insert(phrase.phraseId)
+        // SRS: ровно одна регистрация на фразу за сессию (cycleSession не задваивает, C17/D-23).
+        if !srsCompletedPhraseIds.contains(phrase.phraseId) {
+            srsCompletedPhraseIds.insert(phrase.phraseId)
             onPhraseCompleted?(phrase.phraseId)
         }
     }
 
     private func finishSession() {
         stopTimers()
+        clearSleepTimer() // m15: секундный sleep-таймер не должен пережить завершение
         player?.stop()
         player = nil
         stopSilence()
@@ -478,9 +518,11 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
     private func startProgressTimer() {
         stopProgressTimer()
-        progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tickProgress() }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        progressTimer = timer
     }
 
     private func stopProgressTimer() {
@@ -492,6 +534,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         pauseTimer?.invalidate()
         pauseTimer = nil
         pauseStartedAt = nil
+        legGeneration += 1 // любое устаревшее срабатывание паузы теперь игнорируется
     }
 
     private func stopTimers() {
@@ -515,8 +558,8 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            // Игнорируем колбэк тихого плеера (он зациклён и завершиться не должен).
-            guard player !== self.silencePlayer else { return }
+            // Игнорируем колбэк тихого плеера и устаревший колбэк не-текущего плеера (C15).
+            guard player !== self.silencePlayer, player === self.player else { return }
             self.currentTime = self.currentDuration
             self.advanceLeg()
         }

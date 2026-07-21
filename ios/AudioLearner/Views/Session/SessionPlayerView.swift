@@ -3,13 +3,12 @@ import SwiftUI
 /// Экран 4: плеер сессии (спека §4.6).
 struct SessionPlayerView: View {
     @Environment(AppEnvironment.self) private var env
-    @State private var vm: PlayerViewModel?
-    @State private var started = false
     @State private var showEndConfirm = false
 
     var body: some View {
         Group {
-            if let vm {
+            // Раннер создаётся и стартует в AppEnvironment.beginAudioPlayback (headless-совместимо, C12).
+            if let vm = env.activeAudioSession {
                 content(vm)
             } else {
                 ProgressView("Подготовка сессии…")
@@ -18,13 +17,10 @@ struct SessionPlayerView: View {
         .navigationTitle("Сессия")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            if vm == nil {
-                let model = PlayerViewModel(env: env, flow: env.sessionFlow)
-                vm = model
-            }
-            if !started {
-                started = true
-                vm?.startSession()
+            // Страховка: если по какой-то причине раннер ещё не создан (прямой вход в .player),
+            // создаём и стартуем его здесь.
+            if env.activeAudioSession == nil {
+                env.beginAudioPlayback()
             }
         }
     }

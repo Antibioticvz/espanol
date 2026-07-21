@@ -28,3 +28,14 @@ struct PauseSessionIntent: AudioPlaybackIntent {
         return .result()
     }
 }
+
+/// Возобновление активной сессии (кнопка в Live Activity).
+struct ResumeSessionIntent: AudioPlaybackIntent {
+    static var title: LocalizedStringResource = "Продолжить"
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        IntentActionCoordinator.shared.resumeSession()
+        return .result()
+    }
+}

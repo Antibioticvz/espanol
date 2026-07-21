@@ -31,4 +31,15 @@ enum WidgetSharedStore {
         }
         return stats
     }
+
+    /// Читает статистику, обнуляя minutes/sessions, если кэш не за сегодня (streak сохраняем, C22).
+    static func readNormalized(now: Date = Date()) -> DailyStats {
+        var stats = read()
+        if !Calendar.current.isDate(stats.date, inSameDayAs: now) {
+            stats.minutes = 0
+            stats.sessions = 0
+            stats.date = now
+        }
+        return stats
+    }
 }

@@ -131,7 +131,11 @@ struct SessionConfigView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button {
                     Haptics.impact(.medium, enabled: env.settings.vibrationEnabled)
-                    env.sessionFlow.step = .player
+                    if env.sessionFlow.config.isFlashcards {
+                        env.sessionFlow.step = .player // флеш-карты интерактивны (свой VM)
+                    } else {
+                        env.beginAudioPlayback() // аудио — раннер владеет env (headless-совместимо)
+                    }
                 } label: {
                     Label("Начать", systemImage: "play.fill")
                 }
