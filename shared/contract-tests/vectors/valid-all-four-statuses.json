@@ -1,0 +1,78 @@
+{
+  "schema_version": "1.0",
+  "topic_id": "07-cuatro-estados",
+  "topic_number": 7,
+  "title_ru": "Все 4 статуса фразы — рабочее состояние Combine, не финальный экспорт",
+  "created_at": "2026-01-15T10:30:00.000Z",
+  "generator_version": "1.0.0",
+  "config": {
+    "provider": "elevenlabs",
+    "model": "eleven_multilingual_v2",
+    "voice_es": { "id": "voice-es-1", "name": "Diego" },
+    "voice_ru": { "id": "voice-ru-1", "name": "Milena" },
+    "stability": 0.5,
+    "similarity_boost": 0.75,
+    "seed": 42
+  },
+  "stats": {
+    "phrase_count": 4,
+    "vocab_count": 0,
+    "story_count": 0,
+    "total_elements": 4,
+    "characters_es": 28,
+    "characters_ru": 24,
+    "total_characters": 52
+  },
+  "blocks": [
+    {
+      "block_id": "b1",
+      "type": "verb_group",
+      "title_ru": "Глаголы",
+      "order_index": 0,
+      "groups": [
+        {
+          "key": "tener",
+          "translation_ru": "иметь",
+          "order_index": 0,
+          "phrases": [
+            {
+              "id": "07-b1-tener-01",
+              "es": "Tengo uno.",
+              "ru": "Имею один.",
+              "audio": { "es": "audio/es/07-b1-tener-01.mp3", "ru": "audio/ru/07-b1-tener-01.mp3" },
+              "duration_ms": { "es": 0, "ru": 0 },
+              "status": "pending"
+            },
+            {
+              "id": "07-b1-tener-02",
+              "es": "Tengo dos.",
+              "ru": "Имею два.",
+              "audio": { "es": "audio/es/07-b1-tener-02.mp3", "ru": "audio/ru/07-b1-tener-02.mp3" },
+              "duration_ms": { "es": 0, "ru": 0 },
+              "status": "generating"
+            },
+            {
+              "id": "07-b1-tener-03",
+              "es": "Tengo tres.",
+              "ru": "Имею три.",
+              "audio": { "es": "audio/es/07-b1-tener-03.mp3", "ru": "audio/ru/07-b1-tener-03.mp3" },
+              "duration_ms": { "es": 620, "ru": 580 },
+              "status": "done",
+              "id3_tags_written": true,
+              "generated_at": "2026-01-15T10:31:00.000Z"
+            },
+            {
+              "id": "07-b1-tener-04",
+              "es": "Tengo cuatro.",
+              "ru": "Имею четыре.",
+              "audio": { "es": "audio/es/07-b1-tener-04.mp3", "ru": "audio/ru/07-b1-tener-04.mp3" },
+              "duration_ms": { "es": 0, "ru": 0 },
+              "status": "failed",
+              "error": "ElevenLabs: превышен таймаут запроса (30000ms)"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
