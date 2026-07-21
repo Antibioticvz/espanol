@@ -65,6 +65,34 @@ final class LessonCodableTests: AudioLearnerTestCase {
         }
     }
 
+    // C23: topic_id с traversal отвергается на декодировании.
+    func testRejectsTraversalTopicId() throws {
+        let data = try fixtureManifestData()
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let bad = json.replacingOccurrences(of: "\"topic_id\": \"04-hablar-de-mi-mismo\"",
+                                            with: "\"topic_id\": \"../backups\"")
+        let badData = try XCTUnwrap(bad.data(using: .utf8))
+        XCTAssertThrowsError(try LessonManifest.decodeValidating(from: badData)) { error in
+            guard case ImportError.invalidTopicId = error else {
+                return XCTFail("Ожидалась invalidTopicId, получено: \(error)")
+            }
+        }
+    }
+
+    // m20: audio-путь с traversal отвергается на декодировании.
+    func testRejectsTraversalAudioPath() throws {
+        let data = try fixtureManifestData()
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let bad = json.replacingOccurrences(of: "\"es\": \"audio/es/04-b1-llamarse-01.mp3\"",
+                                            with: "\"es\": \"../../../../etc/passwd.mp3\"")
+        let badData = try XCTUnwrap(bad.data(using: .utf8))
+        XCTAssertThrowsError(try LessonManifest.decodeValidating(from: badData)) { error in
+            guard case ImportError.invalidAudioPath = error else {
+                return XCTFail("Ожидалась invalidAudioPath, получено: \(error)")
+            }
+        }
+    }
+
     func testAcceptsFutureMinorSchemaVersion() throws {
         // Совместимая minor-версия (1.5) должна декодироваться.
         let data = try fixtureManifestData()
