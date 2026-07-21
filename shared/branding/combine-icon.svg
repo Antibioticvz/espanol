@@ -1,0 +1,30 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <title>Combine — icon</title>
+  <desc>
+    Motif: the Spanish letter "ñ" built from a sound wave — a bold rounded
+    arch (n) topped by a wavy tilde that reads as an audio waveform.
+    Corner badge (equalizer bars) marks this as the generator app.
+    No external fonts or images; all shapes are vector paths.
+  </desc>
+
+  <!-- Background: rounded "squircle" per macOS Big Sur+ icon convention.
+       Corners outside the rounded rect stay transparent (icns supports alpha). -->
+  <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="#241714"/>
+
+  <!-- "n" arch: bold rounded stroke, the letter's body -->
+  <path d="M 350 800 L 350 560 C 350 450 420 380 512 380 C 604 380 674 450 674 560 L 674 800"
+        fill="none" stroke="#E2724A" stroke-width="128"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Tilde / sound wave: doubles as the "ñ" diacritic and an audio waveform -->
+  <path d="M 300 255 C 350 190 400 190 445 235 C 490 280 540 280 585 235 C 630 190 680 190 724 245"
+        fill="none" stroke="#F4B942" stroke-width="82"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Badge: generator = equalizer bars -->
+  <circle cx="742" cy="744" r="164" fill="#241714"/>
+  <circle cx="742" cy="744" r="150" fill="#C1272D"/>
+  <rect x="671" y="729" width="34" height="70" rx="17" fill="#F4B942"/>
+  <rect x="725" y="679" width="34" height="120" rx="17" fill="#F4B942"/>
+  <rect x="779" y="709" width="34" height="90" rx="17" fill="#F4B942"/>
+</svg>
