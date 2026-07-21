@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { AppSettings } from '../types/settings'
 import type { Encryptor } from './encryptor'
 import { UnavailableEncryptor } from './encryptor'
 import { SettingsService } from './settings.service'
@@ -59,6 +60,32 @@ describe('SettingsService', () => {
     expect(reloaded.model).toBe('eleven_flash_v2_5')
     expect(reloaded.queue.concurrency).toBe(5)
     expect(reloaded.pricePerThousandChars.eleven_flash_v2_5).toBe(0.06)
+  })
+
+  /**
+   * Мульти-верификаторное ревью (minor, useSettings.ts:40 — атомарность на стороне SettingsService):
+   * тот же приём и тот же регрессионный тест-паттерн, что уже используется для
+   * FileService.writeLessonJson (см. file.service.test.ts) — теперь renderer дебаунсит
+   * автосохранение, но overlapping save()-вызовы (дебаунс-таймер vs flush-при-unmount, или просто
+   * несколько быстрых правок подряд без ожидания предыдущей записи) всё ещё возможны без
+   * сериализации на стороне вызывающего кода.
+   */
+  it('РЕГРЕССИЯ: save() атомарна — много конкурентных записей не оставляют битый settings.json и не оставляют временных файлов', async () => {
+    const service = new SettingsService(userDataDir, new FakeEncryptor())
+    const base = await service.load(outputDir)
+
+    const writes = Array.from({ length: 20 }, (_, i) => service.save({ ...base, model: `model-${i}` }))
+    await Promise.all(writes)
+
+    const raw = await readFile(join(userDataDir, 'settings.json'), 'utf8')
+    // Файл должен быть ПОЛНОСТЬЮ валидным JSON (не обрублен посреди записи одной из 20 конкурентных
+    // save()) — не атомарная запись могла бы перемежать байты двух разных сериализаций.
+    const parsed = JSON.parse(raw) as AppSettings
+    expect(parsed.model).toMatch(/^model-\d+$/)
+
+    // Никаких недоубранных .settings.json.tmp-* после завершения всех записей.
+    const dirEntries = await readdir(userDataDir)
+    expect(dirEntries.filter((f) => f.includes('.tmp-'))).toEqual([])
   })
 
   it('load() сливает частично сохранённый (устаревший) settings.json с дефолтами', async () => {

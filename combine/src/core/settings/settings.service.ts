@@ -66,9 +66,27 @@ export class SettingsService {
     }
   }
 
+  /**
+   * Атомарная запись: пишем во временный файл В ТОЙ ЖЕ директории (гарантирует одну файловую
+   * систему -> rename() атомарен по POSIX) и переименовываем поверх финального пути — тот же
+   * приём, что FileService.writeLessonJson() (см. docstring там же, D-16). Мульти-верификаторное
+   * ревью (minor, useSettings.ts:40): раньше save() писала settings.json НАПРЯМУЮ; теперь, когда
+   * renderer дебаунсит автосохранение (см. useEditableSettings), падение процесса РОВНО во время
+   * writeFile() больше не может оставить settings.json битым/усечённым — читатель (load() при
+   * следующем запуске) увидит либо старую версию целиком, либо новую целиком.
+   */
   async save(settings: AppSettings): Promise<void> {
     await mkdir(this.userDataDir, { recursive: true })
-    await writeFile(this.settingsPath(), JSON.stringify(settings, null, 2), 'utf8')
+    const finalPath = this.settingsPath()
+    const tmpPath = join(this.userDataDir, `.settings.json.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+    const json = JSON.stringify(settings, null, 2)
+    try {
+      await writeFile(tmpPath, json, 'utf8')
+      await rename(tmpPath, finalPath)
+    } catch (e) {
+      await rm(tmpPath, { force: true }).catch(() => undefined)
+      throw e
+    }
   }
 
   isEncryptionAvailable(): boolean {
