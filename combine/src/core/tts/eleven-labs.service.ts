@@ -97,13 +97,27 @@ export class ElevenLabsService implements TTSProvider {
    * (до получения ответа) — сеть/таймаут, retryable:true, как и раньше; сбой ЧТЕНИЯ ТЕЛА
    * ПОСЛЕ успешного res.ok — если это abort (таймаут мог сработать и во время стриминга тела),
    * тоже 'timeout'; любая ДРУГАЯ ошибка на этом этапе — 'unknown', retryable:false.
+   *
+   * Мульти-верификаторное ревью (minor, eleven-labs.service.ts:125): abort/таймаут ПОСЛЕ res.ok
+   * (т.е. заголовки уже пришли, ElevenLabs уже вернул 200 и НАЧАЛ отдавать байты) отличается от
+   * abort ДО ответа принципиально по деньгам — на платном эндпоинте синтеза
+   * (POST /v1/text-to-speech, см. synthesizeOnce) 200 OK означает, что генерация речи уже
+   * произошла и УЖЕ ОПЛАЧЕНА; withRetry() автоматически повторяющий запрос из-за retryable:true
+   * заново запросил бы у ElevenLabs ЕЩЁ ОДИН платный синтез только чтобы обойти локальный сбой
+   * скачивания байтов — незаметное для пользователя удвоение (и далее кратное увеличение) счёта
+   * за один и тот же таймаут. bodyReadTimeoutRetryable позволяет вызывающему коду (synthesizeOnce)
+   * пометить этот путь retryable:false — фраза уйдёт в 'failed' и потребует явного повторного
+   * запуска генерации человеком, а не тихого автоматического пере-биллинга. listVoices/listModels
+   * — бесплатные метаданные, для них abort-посреди-тела по-прежнему retryable:true (по умолчанию).
    */
   private async fetchAndRead<T>(
     url: string,
     init: RequestInit,
     timeoutMs: number,
-    readBody: (res: Response) => Promise<T>
+    readBody: (res: Response) => Promise<T>,
+    options?: { bodyReadTimeoutRetryable?: boolean }
   ): Promise<T> {
+    const bodyReadTimeoutRetryable = options?.bodyReadTimeoutRetryable ?? true
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
@@ -122,7 +136,12 @@ export class ElevenLabsService implements TTSProvider {
       } catch (e) {
         if (e instanceof TtsError) throw e
         if (e instanceof Error && e.name === 'AbortError') {
-          throw new TtsError(`Таймаут запроса (${timeoutMs} мс)`, 'timeout', undefined, true)
+          throw new TtsError(
+            `Таймаут чтения ответа (${timeoutMs} мс) после успешного ответа сервера (200 OK)`,
+            'timeout',
+            undefined,
+            bodyReadTimeoutRetryable
+          )
         }
         throw new TtsError(
           `Не удалось разобрать ответ ElevenLabs: ${e instanceof Error ? e.message : String(e)}`,
@@ -189,7 +208,11 @@ export class ElevenLabsService implements TTSProvider {
         body: JSON.stringify(body)
       },
       timeoutMs,
-      (res) => res.arrayBuffer()
+      (res) => res.arrayBuffer(),
+      // Платный эндпоинт — 200 OK уже означает состоявшуюся (оплаченную) генерацию, см. docstring
+      // fetchAndRead() выше. Таймаут чтения ТЕЛА после этого НЕ должен молча вызывать повторную
+      // (снова платную) попытку синтеза.
+      { bodyReadTimeoutRetryable: false }
     )
     const rawAudio = Buffer.from(arrayBuffer)
     const { audio, normalizationNote } = await this.applyNormalization(rawAudio)

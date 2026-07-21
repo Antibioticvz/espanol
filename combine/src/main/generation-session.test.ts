@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import NodeID3 from 'node-id3'
 import { FileService } from '../core/file/file.service'
 import { SettingsService } from '../core/settings/settings.service'
 import { UnavailableEncryptor } from '../core/settings/encryptor'
@@ -207,5 +208,134 @@ describe('GenerationSession (main/**, реальный MockSayService — бес
     expect(result.topicId).toBe('77-test-sessii')
     expect(result.lesson.topic_id).toBe('77-test-sessii')
     await waitFor(() => !session2.isActive())
+  }, 30000)
+
+  it('РЕГРЕССИЯ (мульти-верификаторное ревью, TOCTOU): второй перекрывающийся start() бросает СРАЗУ, не дожидаясь первого await первого вызова', async () => {
+    const session = new GenerationSession()
+    // Оба вызова инициируются в ОДНОМ тике — без await между ними. До фикса (this.starting)
+    // isActive() полагалась только на this.queue (присваивается лишь в самом конце startCommon,
+    // после кучи await), поэтому второй вызов тоже проходил guard и получались ДВЕ живые очереди.
+    const p1 = session.start({ inputText: MINI_LESSON, settings: settingsFor() }, () => undefined)
+    const p2 = session.start({ inputText: MINI_LESSON, settings: settingsFor() }, () => undefined)
+
+    await expect(p2).rejects.toThrow(/уже выполняется/)
+    await p1
+    await waitFor(() => !session.isActive())
+  }, 30000)
+
+  it('РЕГРЕССИЯ (мульти-верификаторное ревью, TOCTOU): startRegenerate() тоже отклоняет перекрывающийся вызов немедленно', async () => {
+    const session = new GenerationSession()
+    await session.start({ inputText: MINI_LESSON, settings: settingsFor() }, () => undefined)
+    await waitFor(() => !session.isActive())
+
+    const regenParams = {
+      topicId: '77-test-sessii',
+      outputRoot: outputDir,
+      mode: 'all' as const,
+      queueConfig: settingsFor().queue,
+      pricePerThousandChars: {}
+    }
+    const p1 = session.startRegenerate(regenParams, () => undefined)
+    const p2 = session.startRegenerate(regenParams, () => undefined)
+    await expect(p2).rejects.toThrow(/уже выполняется/)
+    await p1
+    await waitFor(() => !session.isActive())
+  }, 30000)
+
+  it('РЕГРЕССИЯ (мульти-верификаторное ревью): cancel() освобождает isActive() — новый start() возможен сразу после await cancel(), без перезапуска приложения', async () => {
+    const session = new GenerationSession()
+    await session.start({ inputText: MINI_LESSON, settings: settingsFor() }, () => undefined)
+    expect(session.isActive()).toBe(true)
+
+    // Раньше: GenerationQueue эмитит runState==='done' ТОЛЬКО при истинном завершении, а finalize()
+    // (единственное место, обнулявшее this.queue) триггерился только этим событием — после cancel()
+    // 'done' никогда не приходило, isActive() оставался true навсегда (до перезапуска процесса).
+    await session.cancel()
+    expect(session.isActive()).toBe(false)
+
+    // Новый старт должен пройти БЕЗ "Генерация уже выполняется" — именно это было заклинено багом.
+    const { topicId } = await session.start({ inputText: MINI_LESSON, settings: settingsFor() }, () => undefined)
+    expect(topicId).toBe('77-test-sessii')
+    await waitFor(() => !session.isActive())
+  }, 30000)
+
+  it('РЕГРЕССИЯ (мульти-верификаторное ревью): startRegenerate() НЕ портит lesson.json, если createProvider() бросает (elevenlabs без сохранённого ключа)', async () => {
+    const session = new GenerationSession()
+    await session.start({ inputText: MINI_LESSON, settings: settingsFor() }, () => undefined)
+    await waitFor(() => !session.isActive())
+
+    // Симулируем "урок был сгенерирован elevenlabs" (в этом тестовом окружении ключ никогда не
+    // сохранён — UnavailableEncryptor, см. beforeEach — так что createProvider('elevenlabs', ...)
+    // гарантированно бросит "API-ключ не задан").
+    const lessonJsonPath = fileService.lessonJsonPath(outputDir, '77-test-sessii')
+    const before = JSON.parse(await readFile(lessonJsonPath, 'utf8')) as LessonJson
+    before.config.provider = 'elevenlabs'
+    await writeFile(lessonJsonPath, JSON.stringify(before), 'utf8')
+
+    const session2 = new GenerationSession()
+    await expect(
+      session2.startRegenerate(
+        { topicId: '77-test-sessii', outputRoot: outputDir, mode: 'all', queueConfig: settingsFor().queue, pricePerThousandChars: {} },
+        () => undefined
+      )
+    ).rejects.toThrow(/API-ключ/)
+
+    // РАНЬШЕ: resetItemStatus+writeLessonJson шли ДО createProvider() — неудавшийся вызов уже
+    // необратимо стирал все done-метки полностью готового урока. Теперь lesson.json должен
+    // остаться НЕТРОНУТЫМ (все статусы всё ещё 'done') после отклонённого вызова.
+    const after = JSON.parse(await readFile(lessonJsonPath, 'utf8')) as LessonJson
+    if (after.blocks[0].type === 'vocabulary') {
+      expect(after.blocks[0].words.every((w) => w.status === 'done')).toBe(true)
+    } else {
+      throw new Error('unexpected block type in test fixture')
+    }
+    expect(session2.isActive()).toBe(false) // сессия не должна остаться "занятой" после отклонённого вызова
+  }, 30000)
+
+  it('РЕГРЕССИЯ (минор — гибрид конфигов): при резюме start() берёт голос из СОХРАНЁННОГО lessonJson.config, а не из подменённых текущих settings (иначе смешение голосов внутри урока)', async () => {
+    const originalSettings = settingsFor({ voiceEs: { id: 'Mónica', name: 'Mónica' }, voiceRu: { id: 'Milena', name: 'Milena' } })
+    const session = new GenerationSession()
+    await session.start({ inputText: MINI_LESSON, settings: originalSettings }, () => undefined)
+    await waitFor(() => !session.isActive())
+
+    // Помечаем один элемент как failed, чтобы повторный импорт того же текста реально пере-озвучил его.
+    const lessonJsonPath = fileService.lessonJsonPath(outputDir, '77-test-sessii')
+    const lessonJson = JSON.parse(await readFile(lessonJsonPath, 'utf8')) as LessonJson
+    if (lessonJson.blocks[0].type !== 'vocabulary') throw new Error('unexpected block type in test fixture')
+    const retriedWord = lessonJson.blocks[0].words[0]
+    retriedWord.status = 'failed'
+    retriedWord.error = 'искусственный сбой для теста'
+    await writeFile(lessonJsonPath, JSON.stringify(lessonJson), 'utf8')
+
+    // "Переключаем" ТЕКУЩИЕ настройки на другой голос ES перед повторным импортом того же текста —
+    // раньше resolveVoices() вызывался с ЭТИМИ (текущими) настройками ДО проверки resuming.
+    const differentSettings = settingsFor({ voiceEs: { id: 'Milena', name: 'Milena' }, voiceRu: { id: 'Milena', name: 'Milena' } })
+    const session2 = new GenerationSession()
+    await session2.start({ inputText: MINI_LESSON, settings: differentSettings }, () => undefined)
+    await waitFor(() => !session2.isActive())
+
+    const wordAudioPath = join(fileService.lessonDir(outputDir, '77-test-sessii'), 'audio', 'es', `${retriedWord.id}.mp3`)
+    const tags = await NodeID3.Promise.read(wordAudioPath)
+    // ID3 artist = имя ГОЛОСА, которым реально озвучена фраза (см. runQueue#onAudioSaved) — должно
+    // быть Mónica (из СОХРАНЁННОГО config), а не Milena (из подменённых текущих settings).
+    expect(tags.artist).toBe('Mónica')
+  }, 30000)
+
+  it('РЕГРЕССИЯ (мульти-верификаторное ревью): getActiveSnapshot() позволяет пересозданному окну переподключиться к уже идущему прогону', async () => {
+    const session = new GenerationSession()
+    expect(session.getActiveSnapshot()).toBeNull()
+
+    const events: GenerationProgressEvent[] = []
+    const { topicId } = await session.start({ inputText: MINI_LESSON, settings: settingsFor() }, (e) => events.push(e))
+
+    const snapshot = session.getActiveSnapshot()
+    expect(snapshot).not.toBeNull()
+    expect(snapshot?.topicId).toBe(topicId)
+    expect(snapshot?.lesson.topic_id).toBe(topicId)
+    expect(['running', 'paused']).toContain(snapshot?.runState)
+
+    await waitFor(() => !session.isActive())
+    // После истинного завершения снимка больше нет — сессия свободна для нового старта.
+    expect(session.getActiveSnapshot()).toBeNull()
   }, 30000)
 })

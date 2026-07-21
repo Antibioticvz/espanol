@@ -54,6 +54,45 @@ export function useGeneration() {
     setLogs([])
   }, [])
 
+  /**
+   * Мульти-верификаторное ревью: main держит генерацию активной независимо от того, сколько
+   * renderer-окон на неё смотрят (macOS — закрытие окна не завершает процесс, см.
+   * generation-session.ts). Без этого пересозданное/перезагруженное окно стартовало с topicId=null
+   * и молча "теряло" реально работающий (и тратящий деньги) прогон — экран показывал «генерация
+   * не запущена», Пауза/Отмена были недоступны (гейтятся на topicId), а «Возобновить»/«Переделать»
+   * из библиотеки лишь падали с «уже выполняется» без видимой причины. При монтировании — один раз —
+   * спрашиваем main о снимке активного прогона и переподключаемся, если он есть.
+   */
+  useEffect(() => {
+    let cancelled = false
+    void api.getActiveGeneration().then((active) => {
+      if (cancelled || !active) return
+      attach({ topicId: active.topicId, lesson: active.lesson })
+      // attach() выше сбрасывает progress в null — синтезируем стартовый снимок с ПРАВИЛЬНЫМ
+      // runState немедленно (Пауза/Отмена/Возобновить читают именно progress?.runState), не
+      // дожидаясь следующего живого события onGenerationProgress, которое может прийти нескоро
+      // (напр. сессия сейчас на паузе и ничего не эмитит, пока пользователь не нажмёт «Возобновить»).
+      setProgress({
+        runState: active.runState,
+        totalItems: 0,
+        doneItems: 0,
+        failedItems: 0,
+        pendingItems: 0,
+        generatingItems: 0,
+        currentItemId: null,
+        currentText: null,
+        elapsedMs: 0,
+        speedPerMin: 0,
+        etaSeconds: null,
+        spentUsd: 0
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const startMutation = useMutation({
     mutationFn: (input: StartGenerationInput) => api.startGeneration(input),
     onSuccess: (result) => {

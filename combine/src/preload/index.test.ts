@@ -178,6 +178,17 @@ describe('preload/index.ts — window.combineApi поверх window.combine (D-
     expect(removeListener).toHaveBeenCalledWith('combine:generation:progress', listener)
   })
 
+  it('getActiveGeneration -> новый канал combine:api:get-active-generation (мульти-верификаторное ревью — переподключение окна)', async () => {
+    invoke.mockResolvedValueOnce(null)
+    const nothing = await combineApi().getActiveGeneration()
+    expect(invoke).toHaveBeenCalledWith('combine:api:get-active-generation')
+    expect(nothing).toBeNull()
+
+    invoke.mockResolvedValueOnce({ topicId: 't', lesson: {}, runState: 'paused' })
+    const active = await combineApi().getActiveGeneration()
+    expect(active).toEqual({ topicId: 't', lesson: {}, runState: 'paused' })
+  })
+
   it('listLibrary -> новый канал combine:api:list-library (без аргументов)', async () => {
     invoke.mockResolvedValueOnce([])
     await combineApi().listLibrary()

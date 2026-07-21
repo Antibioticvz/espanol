@@ -32,6 +32,7 @@ export const ipcAdapter: CombineIpcApi = {
   resumeGeneration: (input) => bridge().resumeGeneration(input),
   cancelGeneration: (input) => bridge().cancelGeneration(input),
   onGenerationProgress: (callback) => bridge().onGenerationProgress(callback),
+  getActiveGeneration: () => bridge().getActiveGeneration(),
   listLibrary: () => bridge().listLibrary(),
   exportZip: (input) => bridge().exportZip(input),
   regenerateAll: (input) => bridge().regenerateAll(input),

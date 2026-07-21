@@ -24,7 +24,7 @@
 import type { ParseResult, ParsedLesson } from '../core/types/parsed-lesson'
 import type { AppSettings, PricingTable } from '../core/types/settings'
 import type { LessonJson, Provider } from '../core/types/lesson-json'
-import type { GenerationProgressEvent, Lang } from '../core/types/generation'
+import type { GenerationProgressEvent, Lang, QueueRunState } from '../core/types/generation'
 
 // ---------------------------------------------------------------------------
 // parseText
@@ -128,6 +128,24 @@ export interface GenerationRunRef {
 export interface StartGenerationResult {
   topicId: string
   lesson: LessonJson
+}
+
+// ---------------------------------------------------------------------------
+// getActiveGeneration — ДОПОЛНЕНИЕ к контракту (мульти-верификаторное ревью).
+//
+// Main держит РОВНО один активный сеанс генерации (GenerationSession) НЕЗАВИСИМО от того, сколько
+// renderer-окон на него смотрят — на macOS закрытие окна не завершает приложение (main продолжает
+// платно генерировать в фоне), а новое/пересозданное окно раньше стартовало с topicId=null и не
+// имело способа узнать, что прогон уже идёт (nested combine:generation:is-active существовал, но
+// не был проброшен в плоский контракт и не возвращал ничего, кроме boolean). Вызывается один раз
+// при монтировании useGeneration() — если сеанс активен, хук сразу переподключается (attach), а не
+// показывает «генерация не запущена» поверх реально работающей и тратящей деньги очереди.
+// ---------------------------------------------------------------------------
+
+export interface ActiveGenerationResult {
+  topicId: string
+  lesson: LessonJson
+  runState: QueueRunState
 }
 
 // ---------------------------------------------------------------------------
@@ -284,6 +302,12 @@ export interface CombineIpcApi {
   cancelGeneration(input: GenerationRunRef): Promise<void>
   /** Подписка на прогресс генерации (статус элемента, лог-строки, потрачено). Может относиться к любому runId. */
   onGenerationProgress(callback: (event: GenerationProgressEvent) => void): UnsubscribeFn
+  /**
+   * Снимок уже идущего в main прогона (или null) — см. комментарий у ActiveGenerationResult выше.
+   * Вызывается при монтировании useGeneration(), чтобы окно, пересозданное поверх уже работающей
+   * (платно тратящей деньги) сессии, сразу переподключилось к ней, а не показывало «не запущена».
+   */
+  getActiveGeneration(): Promise<ActiveGenerationResult | null>
 
   listLibrary(): Promise<LibraryEntry[]>
   exportZip(input: GenerationRunRef): Promise<ExportZipResult>

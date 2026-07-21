@@ -133,4 +133,58 @@ describe('runGenerate — пакетный режим (--input папка), D-22
     const output = errorSpy.mock.calls.map((args) => String(args[0])).join('\n')
     expect(output).toContain('не найдено файлов .txt')
   })
+
+  it('РЕГРЕССИЯ (мульти-верификаторное ревью): коллизия topic_id внутри одного batch-прогона — второй файл помечается ошибкой, а не молча "резюмирует" первый', async () => {
+    const dupDir = join(workDir, 'dup-in')
+    await mkdir(dupDir, { recursive: true })
+    // Оба файла дают ОДИНАКОВЫЙ topic_id (номер+название темы совпадают) — типичный сценарий:
+    // скопированный черновик с забытым заголовком.
+    const DUP_1 = `#TOPIC 63 | Дубликат темы\n##BLOCK vocabulary | Слова\nel perro | собака\n`
+    const DUP_2 = `#TOPIC 63 | Дубликат темы\n##BLOCK vocabulary | Слова\nla casa | дом\n`
+    await writeFile(join(dupDir, '01-first.txt'), DUP_1, 'utf8')
+    await writeFile(join(dupDir, '02-second.txt'), DUP_2, 'utf8')
+
+    const dupOutDir = join(workDir, 'dup-out')
+    const code = await runGenerate({ input: dupDir, provider: 'mock_say', out: dupOutDir })
+
+    expect(code).toBe(1) // частичный провал — второй файл конфликтует с первым
+
+    const lessonDirs = (await readdir(dupOutDir, { withFileTypes: true })).filter((d) => d.isDirectory())
+    expect(lessonDirs).toHaveLength(1) // ровно ОДНА папка урока — от первого файла
+
+    const lessonJson = JSON.parse(await readFile(join(dupOutDir, lessonDirs[0].name, 'lesson.json'), 'utf8'))
+    // Содержимое — от ПЕРВОГО файла (el perro/собака), второй не подмешался и не подменил его молча.
+    expect(lessonJson.blocks[0].words[0].es).toBe('el perro')
+
+    const output = [...logSpy.mock.calls, ...errorSpy.mock.calls].map((args) => String(args[0])).join('\n')
+    expect(output).toContain('уже обработан другим файлом в этом запуске')
+  }, 30000)
+
+  it('РЕГРЕССИЯ (мульти-верификаторное ревью): Ctrl+C (SIGINT) прерывает ВЕСЬ batch, а не только текущую тему', async () => {
+    const sigintDir = join(workDir, 'sigint-in')
+    await mkdir(sigintDir, { recursive: true })
+    // 3 темы — достаточно "долгие" (реальный `say`+lamejs не мгновенен), чтобы SIGINT гарантированно
+    // застал первую тему ещё обрабатывающейся, а не уже завершившейся к моменту сигнала.
+    const T1 = `#TOPIC 64 | Тема раз\n##BLOCK vocabulary | Слова\nel uno | один\nel dos | два\nel tres | три\n`
+    const T2 = `#TOPIC 65 | Тема два\n##BLOCK vocabulary | Слова\nel cuatro | четыре\n`
+    const T3 = `#TOPIC 66 | Тема три\n##BLOCK vocabulary | Слова\nel cinco | пять\n`
+    await writeFile(join(sigintDir, '01.txt'), T1, 'utf8')
+    await writeFile(join(sigintDir, '02.txt'), T2, 'utf8')
+    await writeFile(join(sigintDir, '03.txt'), T3, 'utf8')
+
+    const sigintOutDir = join(workDir, 'sigint-out')
+    const runPromise = runGenerate({ input: sigintDir, provider: 'mock_say', out: sigintOutDir })
+    // Даём первой теме время реально начать генерацию, затем эмитируем ТОТ ЖЕ сигнал, что послал бы
+    // Ctrl+C в терминале — process.on('SIGINT', ...) не различает источник события.
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    process.emit('SIGINT')
+
+    const code = await runPromise
+    expect(code).not.toBe(0)
+
+    const dirs = (await readdir(sigintOutDir, { withFileTypes: true })).filter((d) => d.isDirectory())
+    // РАНЬШЕ: один Ctrl+C ставил на паузу ТОЛЬКО текущую тему, цикл продолжал остальные — все 3
+    // темы обрабатывались бы полностью. ТЕПЕРЬ второй и третий файл не должны обработаться вовсе.
+    expect(dirs.length).toBeLessThan(3)
+  }, 30000)
 })

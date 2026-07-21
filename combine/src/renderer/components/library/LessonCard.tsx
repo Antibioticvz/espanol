@@ -99,6 +99,17 @@ export function LessonCard({ entry, onGenerationStarted }: LessonCardProps): JSX
                 danger
                 onClick={() => {
                   setMenuOpen(false)
+                  // Мульти-верификаторное ревью (minor, LessonCard.tsx:102): удаление — необратимый
+                  // rm -rf папки урока целиком (lesson.json + ВСЕ уже сгенерированные mp3, зачастую
+                  // платно озвученные через ElevenLabs) — раньше срабатывало по одному клику без
+                  // единого подтверждения (случайный клик/двойной клик по пункту меню терял урок
+                  // безвозвратно). window.confirm — простое синхронное подтверждение, доступное в
+                  // Electron renderer без дополнительного IPC.
+                  const confirmed = window.confirm(
+                    `Удалить урок «${lesson.title_ru}» (Тема ${String(lesson.topic_number).padStart(2, '0')})?\n\n` +
+                      'Это действие необратимо: lesson.json и все сгенерированные аудиофайлы будут удалены с диска.'
+                  )
+                  if (!confirmed) return
                   actions.deleteLesson.mutate({ topicId: lesson.topic_id })
                 }}
               />

@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs'
 import { readFile, readdir } from 'node:fs/promises'
-import { join } from 'node:path'
 import { isGroupsBlockJson, type AudioPair, type BlockJson, type DurationPair, type ItemStatus, type LessonJson } from '../core/types/lesson-json'
 import type { FileService } from '../core/file/file.service'
 import { storySlug } from '../core/queue/build-items'
+import { resolveWithinDir } from '../core/util/paths'
 import type { LibraryEntry, LibraryStatus } from '../shared/ipc'
 
 /**
@@ -93,7 +93,16 @@ export function findAudioItem(lesson: LessonJson, phraseId: string): FoundAudioI
   return null
 }
 
-/** Читает байты уже сгенерированного mp3 фразы/слова и кодирует как data: URI (audio/mpeg — оба провайдера пишут mp3, см. D-04). */
+/**
+ * Читает байты уже сгенерированного mp3 фразы/слова и кодирует как data: URI (audio/mpeg — оба
+ * провайдера пишут mp3, см. D-04).
+ *
+ * Мульти-верификаторное ревью: relPath приходит из lesson.json (audio.es/audio.ru) — файла,
+ * который в принципе мог быть отредактирован вручную или получен из недоверенного источника.
+ * Без проверки directory traversal (напр. "../../../../etc/passwd") эта функция читала бы и
+ * возвращала renderer'у байты произвольного файла с диска как data: URL. resolveWithinDir()
+ * бросает, если результат вышел за пределы папки урока.
+ */
 export async function readPhraseAudioDataUrl(
   fileService: FileService,
   outputRoot: string,
@@ -105,7 +114,7 @@ export async function readPhraseAudioDataUrl(
   const found = findAudioItem(lesson, phraseId)
   if (!found) throw new Error(`Фраза "${phraseId}" не найдена в уроке "${topicId}".`)
   const relPath = lang === 'es' ? found.audio.es : found.audio.ru
-  const absPath = join(fileService.lessonDir(outputRoot, topicId), ...relPath.split('/'))
+  const absPath = resolveWithinDir(fileService.lessonDir(outputRoot, topicId), relPath)
   const bytes = await readFile(absPath)
   const durationMs = lang === 'es' ? found.duration_ms.es : found.duration_ms.ru
   return { audioDataUrl: `data:audio/mpeg;base64,${bytes.toString('base64')}`, durationMs }

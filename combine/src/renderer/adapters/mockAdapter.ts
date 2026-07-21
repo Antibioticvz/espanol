@@ -19,6 +19,7 @@ import type { AppSettings } from '../../core/types/settings'
 import type { DurationPair, ItemStatus, LessonJson } from '../../core/types/lesson-json'
 import type { GenerationProgressEvent, QueueRunState } from '../../core/types/generation'
 import type {
+  ActiveGenerationResult,
   ApiKeyStatusResult,
   CombineIpcApi,
   EstimateCostInput,
@@ -474,6 +475,14 @@ function onGenerationProgress(callback: (event: GenerationProgressEvent) => void
   return () => listeners.delete(callback)
 }
 
+/** Мульти-верификаторное ревью — переподключение к уже идущему прогону при (пере)монтировании хука. */
+async function getActiveGeneration(): Promise<ActiveGenerationResult | null> {
+  await delay(30)
+  const run = runs.values().next().value
+  if (!run) return null
+  return { topicId: run.topicId, lesson: cloneLesson(run.lessonJson), runState: run.runState }
+}
+
 async function listLibrary(): Promise<LibraryEntry[]> {
   await delay(150)
   return library
@@ -588,6 +597,7 @@ export const mockAdapter: CombineIpcApi = {
   resumeGeneration,
   cancelGeneration,
   onGenerationProgress,
+  getActiveGeneration,
   listLibrary,
   exportZip,
   regenerateAll,

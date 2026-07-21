@@ -149,6 +149,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('combine:library:export-zip', async (_event, params: { outputRoot: string; topicId: string }) => {
     const settings = await ctx.settingsService.load(ctx.defaultOutputDir)
     const outputRoot = assertKnownOutputRoot(params.outputRoot, settings.outputDir)
+    // Мульти-верификаторное ревью: не паковать ZIP для iOS, если урок не полностью готов — см.
+    // FileService.assertLessonComplete()/cli/commands/export.ts (та же защита, одно место правды).
+    ctx.fileService.assertLessonComplete(await ctx.fileService.readLessonJson(outputRoot, params.topicId))
     const zipPath = ctx.fileService.defaultZipPath(outputRoot, params.topicId)
     await ctx.fileService.exportZip(outputRoot, params.topicId, zipPath)
     return { zipPath }
@@ -242,6 +245,10 @@ function registerFlatApiHandlers(ctx: ReturnType<typeof getAppContext>): void {
     return generationSession.startParsed(input, forwardProgress)
   })
 
+  // Мульти-верификаторное ревью: окно, пересозданное поверх уже идущей (в фоне, платно) генерации,
+  // должно суметь переподключиться к ней вместо того, чтобы стартовать с "пусто" — см. useGeneration.ts.
+  ipcMain.handle('combine:api:get-active-generation', () => generationSession.getActiveSnapshot())
+
   ipcMain.handle('combine:api:list-library', async () => {
     const settings = await ctx.settingsService.load(ctx.defaultOutputDir)
     return buildLibraryEntries(settings.outputDir, ctx.fileService)
@@ -249,6 +256,8 @@ function registerFlatApiHandlers(ctx: ReturnType<typeof getAppContext>): void {
 
   ipcMain.handle('combine:api:export-zip', async (_event, input: GenerationRunRef) => {
     const settings = await ctx.settingsService.load(ctx.defaultOutputDir)
+    // Мульти-верификаторное ревью: см. комментарий у combine:library:export-zip выше.
+    ctx.fileService.assertLessonComplete(await ctx.fileService.readLessonJson(settings.outputDir, input.topicId))
     const zipPath = ctx.fileService.defaultZipPath(settings.outputDir, input.topicId)
     await ctx.fileService.exportZip(settings.outputDir, input.topicId, zipPath)
     return { zipPath }
