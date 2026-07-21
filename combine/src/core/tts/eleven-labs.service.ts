@@ -9,7 +9,8 @@ import { TtsError } from './tts-provider'
  *  - `GET /v1/models` → плоский JSON-массив [{ model_id, name, ... }].
  *  - `POST /v1/text-to-speech/{voice_id}` → тело { text, model_id, voice_settings:{stability,similarity_boost}, seed? },
  *    ответ — сырые байты audio/mpeg (не JSON).
- *  - Retry: exponential backoff 1s/2s/4s только для 429/5xx/timeout; 401/400 не ретраятся.
+ *  - Retry: exponential backoff 1s/2s/4s только для 429/5xx/timeout; 401/400 не ретраятся;
+ *    429 уважает заголовок Retry-After сервера, если он есть (иначе — экспонента).
  *
  * baseUrl инжектируется конструктором — тесты поднимают локальный http-стаб (node:http на 127.0.0.1)
  * и НИКОГДА не обращаются к реальному api.elevenlabs.io (правило №1 CLAUDE.md — реальный запрос платный).
@@ -23,13 +24,29 @@ export interface ElevenLabsServiceOptions {
   maxRetries?: number
   /** База экспоненциального backoff в мс (1x/2x/4x...). По умолчанию 1000 (1s/2s/4s). Тесты уменьшают. */
   backoffBaseMs?: number
+  /** Таймаут для GET /v1/voices и GET /v1/models (не связан с per-request timeoutMs синтеза). */
+  listTimeoutMs?: number
   fetchImpl?: typeof fetch
 }
 
 const DEFAULT_BASE_URL = 'https://api.elevenlabs.io'
+const DEFAULT_LIST_TIMEOUT_MS = 15000
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Разбирает Retry-After: либо число секунд, либо HTTP-дата. undefined, если не удалось. */
+function parseRetryAfterMs(headerValue: string | null): number | undefined {
+  if (!headerValue) return undefined
+  const seconds = Number(headerValue)
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000
+  const dateMs = Date.parse(headerValue)
+  if (!Number.isNaN(dateMs)) {
+    const deltaMs = dateMs - Date.now()
+    return deltaMs > 0 ? deltaMs : 0
+  }
+  return undefined
 }
 
 export class ElevenLabsService implements TTSProvider {
@@ -39,6 +56,7 @@ export class ElevenLabsService implements TTSProvider {
   private readonly baseUrl: string
   private readonly maxRetries: number
   private readonly backoffBaseMs: number
+  private readonly listTimeoutMs: number
   private readonly fetchImpl: typeof fetch
 
   constructor(options: ElevenLabsServiceOptions) {
@@ -46,6 +64,7 @@ export class ElevenLabsService implements TTSProvider {
     this.baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '')
     this.maxRetries = options.maxRetries ?? 3
     this.backoffBaseMs = options.backoffBaseMs ?? 1000
+    this.listTimeoutMs = options.listTimeoutMs ?? DEFAULT_LIST_TIMEOUT_MS
     this.fetchImpl = options.fetchImpl ?? fetch
   }
 
@@ -53,10 +72,43 @@ export class ElevenLabsService implements TTSProvider {
     return { 'xi-api-key': this.apiKey, ...extra }
   }
 
+  /**
+   * fetch() + чтение тела под ОДНИМ AbortController/таймером — таймаут обязан покрывать не
+   * только заголовки ответа, но и стриминг тела (напр. abort может сработать посреди
+   * res.arrayBuffer() у большого MP3; без этого AbortError утёк бы наружу необёрнутым вместо
+   * TtsError(kind:'timeout')). Также используется для listVoices/listModels (ранее без таймаута
+   * вообще — зависшая сеть вешала промис навсегда).
+   */
+  private async fetchAndRead<T>(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number,
+    readBody: (res: Response) => Promise<T>
+  ): Promise<T> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const res = await this.fetchImpl(url, { ...init, signal: controller.signal })
+      if (!res.ok) throw await this.toError(res)
+      return await readBody(res)
+    } catch (e) {
+      if (e instanceof TtsError) throw e
+      if (e instanceof Error && e.name === 'AbortError') {
+        throw new TtsError(`Таймаут запроса (${timeoutMs} мс)`, 'timeout', undefined, true)
+      }
+      throw new TtsError(`Сетевая ошибка запроса: ${e instanceof Error ? e.message : String(e)}`, 'network', undefined, true)
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   async listVoices(): Promise<TtsVoice[]> {
-    const res = await this.fetchImpl(`${this.baseUrl}/v1/voices`, { headers: this.headers() })
-    if (!res.ok) throw await this.toError(res)
-    const data = (await res.json()) as { voices?: Array<Record<string, unknown>> }
+    const data = await this.fetchAndRead<{ voices?: Array<Record<string, unknown>> }>(
+      `${this.baseUrl}/v1/voices`,
+      { headers: this.headers() },
+      this.listTimeoutMs,
+      (res) => res.json() as Promise<{ voices?: Array<Record<string, unknown>> }>
+    )
     const voices = Array.isArray(data.voices) ? data.voices : []
     return voices.map((v) => ({
       id: String(v.voice_id ?? ''),
@@ -68,9 +120,12 @@ export class ElevenLabsService implements TTSProvider {
   }
 
   async listModels(): Promise<TtsModel[]> {
-    const res = await this.fetchImpl(`${this.baseUrl}/v1/models`, { headers: this.headers() })
-    if (!res.ok) throw await this.toError(res)
-    const data = (await res.json()) as unknown
+    const data = await this.fetchAndRead<unknown>(
+      `${this.baseUrl}/v1/models`,
+      { headers: this.headers() },
+      this.listTimeoutMs,
+      (res) => res.json()
+    )
     const arr = Array.isArray(data) ? (data as Array<Record<string, unknown>>) : []
     return arr.map((m) => ({ id: String(m.model_id ?? ''), name: String(m.name ?? m.model_id ?? '') }))
   }
@@ -81,47 +136,30 @@ export class ElevenLabsService implements TTSProvider {
 
   private async synthesizeOnce(params: TtsSynthesizeParams): Promise<TtsSynthesizeResult> {
     const timeoutMs = params.timeoutMs ?? 30000
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
-    try {
-      const body: Record<string, unknown> = {
-        text: params.text,
-        model_id: params.modelId,
-        voice_settings: {
-          stability: params.stability ?? 0.5,
-          similarity_boost: params.similarityBoost ?? 0.75
-        }
+    const body: Record<string, unknown> = {
+      text: params.text,
+      model_id: params.modelId,
+      voice_settings: {
+        stability: params.stability ?? 0.5,
+        similarity_boost: params.similarityBoost ?? 0.75
       }
-      if (params.seed !== null && params.seed !== undefined) body.seed = params.seed
-
-      const url = `${this.baseUrl}/v1/text-to-speech/${encodeURIComponent(params.voiceId)}?output_format=mp3_44100_128`
-      let res: Response
-      try {
-        res = await this.fetchImpl(url, {
-          method: 'POST',
-          headers: this.headers({ 'Content-Type': 'application/json', Accept: 'audio/mpeg' }),
-          body: JSON.stringify(body),
-          signal: controller.signal
-        })
-      } catch (e) {
-        if (e instanceof Error && e.name === 'AbortError') {
-          throw new TtsError(`Таймаут запроса TTS (${timeoutMs} мс)`, 'timeout', undefined, true)
-        }
-        throw new TtsError(
-          `Сетевая ошибка запроса TTS: ${e instanceof Error ? e.message : String(e)}`,
-          'network',
-          undefined,
-          true
-        )
-      }
-      if (!res.ok) throw await this.toError(res)
-      const arrayBuffer = await res.arrayBuffer()
-      const audio = Buffer.from(arrayBuffer)
-      const durationMs = await this.estimateDurationMs(audio)
-      return { audio, durationMs, characters: params.text.length }
-    } finally {
-      clearTimeout(timer)
     }
+    if (params.seed !== null && params.seed !== undefined) body.seed = params.seed
+
+    const url = `${this.baseUrl}/v1/text-to-speech/${encodeURIComponent(params.voiceId)}?output_format=mp3_44100_128`
+    const arrayBuffer = await this.fetchAndRead(
+      url,
+      {
+        method: 'POST',
+        headers: this.headers({ 'Content-Type': 'application/json', Accept: 'audio/mpeg' }),
+        body: JSON.stringify(body)
+      },
+      timeoutMs,
+      (res) => res.arrayBuffer()
+    )
+    const audio = Buffer.from(arrayBuffer)
+    const durationMs = await this.estimateDurationMs(audio)
+    return { audio, durationMs, characters: params.text.length }
   }
 
   /** D-13: длительность реальной генерации — из самого MP3 (music-metadata), а не по числу слов. */
@@ -132,7 +170,14 @@ export class ElevenLabsService implements TTSProvider {
       const mm = await import('music-metadata')
       const meta = await mm.parseBuffer(audio, { mimeType: 'audio/mpeg' })
       return Math.round((meta.format.duration ?? 0) * 1000)
-    } catch {
+    } catch (e) {
+      // НЕ тихий успех: если длительность не удалось определить, phrase получит duration_ms=0,
+      // что заметно на экране генерации/библиотеки — залогируем причину, а не проглатываем молча.
+      console.warn(
+        `[ElevenLabsService] Не удалось определить длительность MP3 через music-metadata (duration_ms будет 0): ${
+          e instanceof Error ? e.message : String(e)
+        }`
+      )
       return 0
     }
   }
@@ -150,7 +195,8 @@ export class ElevenLabsService implements TTSProvider {
       return new TtsError(`Ошибка авторизации ElevenLabs (${status}): ${detail}`, 'auth', status, false)
     }
     if (status === 429) {
-      return new TtsError(`Превышен лимит запросов ElevenLabs (429): ${detail}`, 'rate_limit', status, true)
+      const retryAfterMs = parseRetryAfterMs(res.headers.get('retry-after'))
+      return new TtsError(`Превышен лимит запросов ElevenLabs (429): ${detail}`, 'rate_limit', status, true, retryAfterMs)
     }
     if (status === 400 || status === 422) {
       return new TtsError(`Некорректный запрос к ElevenLabs (${status}): ${detail}`, 'bad_request', status, false)
@@ -168,9 +214,12 @@ export class ElevenLabsService implements TTSProvider {
         return await fn()
       } catch (e) {
         lastError = e
-        const retryable = e instanceof TtsError ? e.retryable : true
+        // Неизвестные (не-TtsError) ошибки — НЕ ретраим: это, скорее всего, программная ошибка
+        // (баг), а не временный сбой сети/сервера, и слепой ретрай лишь маскирует её на 1s/2s/4s.
+        const retryable = e instanceof TtsError ? e.retryable : false
         if (!retryable || attempt === this.maxRetries) throw e
-        const delay = this.backoffBaseMs * Math.pow(2, attempt) // 1s, 2s, 4s при backoffBaseMs=1000
+        const delay =
+          e instanceof TtsError && e.retryAfterMs !== undefined ? e.retryAfterMs : this.backoffBaseMs * Math.pow(2, attempt)
         await sleep(delay)
       }
     }

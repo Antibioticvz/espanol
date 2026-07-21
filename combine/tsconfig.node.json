@@ -1,6 +1,5 @@
 {
   "compilerOptions": {
-    "composite": true,
     "target": "ES2022",
     "lib": ["ES2023"],
     "module": "ESNext",
@@ -16,7 +15,6 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "types": ["node"],
-    "outDir": "./.tsbuildinfo-node",
     "noEmit": true
   },
   "include": [

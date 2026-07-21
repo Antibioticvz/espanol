@@ -59,12 +59,15 @@ export class TtsError extends Error {
   readonly kind: TtsErrorKind
   readonly status?: number
   readonly retryable: boolean
+  /** Если сервер прислал Retry-After (напр. на 429) — предпочитать эту задержку экспоненциальной. */
+  readonly retryAfterMs?: number
 
-  constructor(message: string, kind: TtsErrorKind, status?: number, retryable = false) {
+  constructor(message: string, kind: TtsErrorKind, status?: number, retryable = false, retryAfterMs?: number) {
     super(message)
     this.name = 'TtsError'
     this.kind = kind
     this.status = status
     this.retryable = retryable
+    this.retryAfterMs = retryAfterMs
   }
 }

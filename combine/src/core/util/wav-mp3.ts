@@ -38,9 +38,27 @@ export function parseWav(buf: Buffer): PcmData {
     throw new Error(`Ожидался mono 16-bit WAV, получено ${fmt.channels}ch ${fmt.bits}bit`)
   }
   return {
-    samples: new Int16Array(data.buffer, data.byteOffset, data.byteLength / 2),
+    samples: toAlignedInt16Array(data),
     sampleRate: fmt.sampleRate
   }
+}
+
+/**
+ * `data` — это `buf.subarray(...)`, т.е. вид поверх общего ArrayBuffer буфера `buf`, чей
+ * byteOffset — сумма позиции DATA-чанка в WAV-файле (значение, зависящее от размеров
+ * предшествующих чанков, произвольное) и возможного смещения самого `buf` в пуле Node.js
+ * (Buffer.allocUnsafe для небольших буферов нарезает из общего пула по произвольной границе).
+ * Int16Array ТРЕБУЕТ byteOffset, кратный 2 (BYTES_PER_ELEMENT) — иначе бросает RangeError.
+ * Копируем в свежий невыровненный-с-пулом буфер (allocUnsafeSlow гарантированно даёт
+ * собственный ArrayBuffer с byteOffset=0) только когда это реально необходимо.
+ */
+function toAlignedInt16Array(data: Buffer): Int16Array {
+  if (data.byteOffset % 2 === 0) {
+    return new Int16Array(data.buffer, data.byteOffset, data.byteLength / 2)
+  }
+  const aligned = Buffer.allocUnsafeSlow(data.byteLength)
+  data.copy(aligned)
+  return new Int16Array(aligned.buffer, aligned.byteOffset, aligned.byteLength / 2)
 }
 
 type Mp3EncoderCtor = new (channels: number, sampleRate: number, kbps: number) => {
