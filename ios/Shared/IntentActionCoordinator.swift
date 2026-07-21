@@ -11,6 +11,8 @@ final class IntentActionCoordinator {
     var onStartDailySession: (() -> Bool)?
     /// Пауза текущей сессии (кнопка в Live Activity).
     var onPauseSession: (() -> Void)?
+    /// Возобновление текущей сессии (кнопка в Live Activity).
+    var onResumeSession: (() -> Void)?
 
     private init() {}
 
@@ -18,4 +20,5 @@ final class IntentActionCoordinator {
     func startDailySession() -> Bool { onStartDailySession?() ?? false }
 
     func pauseSession() { onPauseSession?() }
+    func resumeSession() { onResumeSession?() }
 }

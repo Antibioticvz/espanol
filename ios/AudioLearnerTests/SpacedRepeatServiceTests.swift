@@ -100,6 +100,30 @@ final class SpacedRepeatServiceTests: AudioLearnerTestCase {
         XCTAssertEqual(phrase.stateEnum, .mastered)
     }
 
+    // C18: registerReview не должен падать на удалённой фразе (cascade при удалении урока).
+    func testRegisterReviewGracefulOnDeletedPhrase() throws {
+        let phrase = makePhrase(state: .learning, reviewCount: 1)
+        try context.save()
+        context.delete(phrase)
+        try context.save()
+        // Не крэшит, возвращает nil.
+        XCTAssertNil(srs.registerReview(phrase, wasCorrect: true))
+        XCTAssertNil(srs.registerReview(phrase, wasCorrect: false))
+    }
+
+    // m18: провал («Не знал») не сдвигает lastReviewDate — карта остаётся due.
+    func testWrongAnswerKeepsCardDue() throws {
+        let phrase = makePhrase(state: .learning, reviewCount: 0)
+        let old = Calendar.current.date(byAdding: .day, value: -5, to: Date())!
+        phrase.lastReviewDate = old
+        let transition = srs.registerReview(phrase, wasCorrect: false)
+        XCTAssertNil(transition)
+        XCTAssertEqual(phrase.reviewCount, 1, "reviewCount растёт")
+        XCTAssertEqual(phrase.lastReviewDate, old, "lastReviewDate НЕ сдвигается при провале")
+        XCTAssertEqual(phrase.statistics?.correctCount, 0)
+        XCTAssertTrue(srs.isDue(phrase), "карта остаётся к повтору")
+    }
+
     // MARK: - Recommendations by date
 
     func testRecommendationsByLastReviewDate() throws {

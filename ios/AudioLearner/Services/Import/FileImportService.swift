@@ -14,6 +14,11 @@ final class FileImportService {
     /// и должен оставить существующий урок нетронутым.
     var beforeSwapHook: (() throws -> Void)?
 
+    // Лимиты против zip-бомбы/OOM (m21).
+    static let maxUncompressedBytes: Int64 = 600 * 1024 * 1024 // 600 МБ
+    static let maxArchiveEntries = 20_000
+    static let maxLessonJsonBytes: Int64 = 25 * 1024 * 1024     // 25 МБ
+
     /// Результат распаковки и валидации — используется для показа инфо до импорта.
     struct Prepared {
         let manifest: LessonManifest
@@ -41,6 +46,9 @@ final class FileImportService {
             let needsSecurityScope = zipURL.startAccessingSecurityScopedResource()
             defer { if needsSecurityScope { zipURL.stopAccessingSecurityScopedResource() } }
 
+            // m21: до распаковки проверяем суммарный распакованный размер/число записей (zip-бомба).
+            try enforceArchiveLimits(zipURL: zipURL)
+
             do {
                 try FileManager.default.unzipItem(at: zipURL, to: tempDir)
             } catch {
@@ -53,6 +61,11 @@ final class FileImportService {
             let jsonURL = contentRoot.appendingPathComponent("lesson.json")
             guard FileManager.default.fileExists(atPath: jsonURL.path) else {
                 throw ImportError.missingJSON
+            }
+            // m21: не грузим в память гигантский lesson.json.
+            let jsonSize = (try? FileManager.default.attributesOfItem(atPath: jsonURL.path)[.size] as? Int64) ?? nil
+            if let jsonSize, jsonSize > Self.maxLessonJsonBytes {
+                throw ImportError.tooLarge("lesson.json \(jsonSize) байт")
             }
             let data = try Data(contentsOf: jsonURL)
             let manifest = try LessonManifest.decodeValidating(from: data)
@@ -86,6 +99,13 @@ final class FileImportService {
         let destination = AppPaths.lessonsDirectory
             .appendingPathComponent(manifest.topicId, isDirectory: true)
 
+        // C23 (защита в глубину): destination строго внутри каталога уроков.
+        let base = AppPaths.lessonsDirectory.standardizedFileURL.path
+        let destPath = destination.standardizedFileURL.path
+        guard destPath == base || destPath.hasPrefix(base + "/") else {
+            throw ImportError.invalidTopicId(manifest.topicId)
+        }
+
         // Атомарная установка файлов: staging → проверка полноты → подмена.
         // Если что-то падает до подмены, существующий урок остаётся нетронутым.
         try atomicInstall(manifest: manifest, from: prepared.extractedRoot, to: destination)
@@ -112,6 +132,25 @@ final class FileImportService {
             options: [.skipsHiddenFiles]
         ) else { return }
         for url in entries { try? fm.removeItem(at: url) }
+    }
+
+    /// m21: суммарный распакованный размер и число записей архива против zip-бомбы.
+    private func enforceArchiveLimits(zipURL: URL) throws {
+        guard let archive = Archive(url: zipURL, accessMode: .read) else {
+            throw ImportError.cannotOpenArchive
+        }
+        var total: Int64 = 0
+        var count = 0
+        for entry in archive {
+            count += 1
+            if count > Self.maxArchiveEntries {
+                throw ImportError.tooLarge("слишком много файлов в архиве")
+            }
+            total += Int64(entry.uncompressedSize)
+            if total > Self.maxUncompressedBytes {
+                throw ImportError.tooLarge("распакованный размер превышает лимит")
+            }
+        }
     }
 
     // MARK: - Atomic install

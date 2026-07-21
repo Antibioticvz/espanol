@@ -60,24 +60,31 @@ struct SpacedRepeatService {
     /// - Returns: переход состояния, если он произошёл (только при `wasCorrect == true`).
     @discardableResult
     func registerReview(_ phrase: Phrase, at date: Date = Date(), wasCorrect: Bool = true) -> StateTransition? {
-        phrase.reviewCount += 1
-        phrase.lastReviewDate = date
+        // C18: фраза могла быть удалена (cascade при удалении урока-источника) — не роняем приложение.
+        guard let ctx = phrase.managedObjectContext, !phrase.isDeleted else { return nil }
 
-        // Статистика фразы.
-        let stats = phrase.statistics ?? PhraseStatistics(context: phrase.managedObjectContext!)
+        phrase.reviewCount += 1
+
+        let stats = phrase.statistics ?? PhraseStatistics(context: ctx)
         stats.phrase = phrase
         stats.totalReviewCount += 1
         stats.lastReviewedAt = date
         if wasCorrect { stats.correctCount += 1 }
 
         let old = phrase.stateEnum
-        // Повышение state только при корректном ответе.
-        let new = wasCorrect ? Self.evaluateState(current: old, reviewCount: Int(phrase.reviewCount)) : old
-        // Следующая дата повтора (интервальная рекомендация).
-        phrase.nextReviewDate = Self.nextReviewDate(for: new, from: date)
-        guard new != old else { return nil }
-        phrase.stateEnum = new
-        return StateTransition(phraseId: phrase.phraseId, oldState: old, newState: new)
+        if wasCorrect {
+            // Успех: сдвигаем расписание и, возможно, повышаем state.
+            phrase.lastReviewDate = date
+            let new = Self.evaluateState(current: old, reviewCount: Int(phrase.reviewCount))
+            phrase.nextReviewDate = Self.nextReviewDate(for: new, from: date)
+            guard new != old else { return nil }
+            phrase.stateEnum = new
+            return StateTransition(phraseId: phrase.phraseId, oldState: old, newState: new)
+        } else {
+            // m18: провал не сдвигает lastReviewDate (карта остаётся due), делаем её срочной.
+            phrase.nextReviewDate = date
+            return nil
+        }
     }
 
     /// Рекомендованная дата следующего повтора по состоянию.

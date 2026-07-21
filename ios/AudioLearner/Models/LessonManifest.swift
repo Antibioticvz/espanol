@@ -225,7 +225,11 @@ extension LessonManifest {
         return decoder
     }
 
-    /// Декодирует и проверяет совместимость версии схемы.
+    /// Паттерны схемы (shared/lesson.schema.json) для защиты от directory traversal.
+    static let topicIdPattern = "^[0-9]{2}-[a-z0-9-]+$"
+    static let audioPathPattern = "^audio/(es|ru)/[A-Za-z0-9._-]+\\.mp3$"
+
+    /// Декодирует и валидирует манифест: версия схемы + защита путей (topic_id, audio).
     static func decodeValidating(from data: Data) throws -> LessonManifest {
         let manifest: LessonManifest
         do {
@@ -235,6 +239,18 @@ extension LessonManifest {
         }
         guard let major = manifest.schemaMajorVersion, major == supportedSchemaMajor else {
             throw ImportError.unsupportedSchemaVersion(manifest.schemaVersion)
+        }
+        // C23: topic_id строит путь каталога — отвергаем всё, что не соответствует схеме («..», «/»).
+        guard manifest.topicId.range(of: topicIdPattern, options: .regularExpression) != nil else {
+            throw ImportError.invalidTopicId(manifest.topicId)
+        }
+        // m20: audio-пути тоже строят пути файлов — валидируем паттерном схемы (traversal).
+        for pair in manifest.allAudioPairs {
+            for rel in [pair.es, pair.ru] {
+                guard rel.range(of: audioPathPattern, options: .regularExpression) != nil else {
+                    throw ImportError.invalidAudioPath(rel)
+                }
+            }
         }
         return manifest
     }

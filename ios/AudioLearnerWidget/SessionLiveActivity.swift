@@ -31,10 +31,7 @@ struct SessionLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack {
                         ProgressView(value: progress(context))
-                        Button(intent: PauseSessionIntent()) {
-                            Image(systemName: "pause.fill")
-                        }
-                        .buttonStyle(.bordered)
+                        playPauseButton(context.state.isPlaying)
                     }
                 }
             } compactLeading: {
@@ -69,11 +66,20 @@ struct SessionLiveActivity: Widget {
             }
             HStack {
                 ProgressView(value: progress(context))
-                Button(intent: PauseSessionIntent()) {
-                    Image(systemName: "pause.fill")
-                }
-                .buttonStyle(.bordered)
+                playPauseButton(context.state.isPlaying)
             }
+        }
+    }
+
+    /// Кнопка play/pause с иконкой и интентом по текущему состоянию (C21).
+    @ViewBuilder
+    private func playPauseButton(_ isPlaying: Bool) -> some View {
+        if isPlaying {
+            Button(intent: PauseSessionIntent()) { Image(systemName: "pause.fill") }
+                .buttonStyle(.bordered)
+        } else {
+            Button(intent: ResumeSessionIntent()) { Image(systemName: "play.fill") }
+                .buttonStyle(.bordered)
         }
     }
 }

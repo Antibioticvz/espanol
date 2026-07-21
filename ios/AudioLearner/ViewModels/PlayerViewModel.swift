@@ -18,19 +18,35 @@ final class PlayerViewModel {
     @ObservationIgnored private var startedAt = Date()
     @ObservationIgnored private var transitions: [SpacedRepeatService.StateTransition] = []
     @ObservationIgnored private var didFinish = false
-    @ObservationIgnored private let liveActivity = LiveActivityService()
+    @ObservationIgnored private var didStart = false
     @ObservationIgnored private var lastActivityIndex = -1
+    @ObservationIgnored private var wasPlayingBeforeInterruption = false
+    /// phraseId → objectID проигрываемых фраз (адресуем именно их, а не глобальный fetch, m19).
+    @ObservationIgnored private var phraseObjectIDs: [String: NSManagedObjectID] = [:]
+
+    private var liveActivity: LiveActivityService { env.liveActivity }
 
     init(env: AppEnvironment, flow: SessionFlow) {
         self.env = env
         self.flow = flow
     }
 
+    /// Разрешает проигрываемую фразу по её objectID (уникальна между уроками, m19).
+    private func phrase(for phraseId: String) -> Phrase? {
+        guard let id = phraseObjectIDs[phraseId],
+              let obj = try? env.viewContext.existingObject(with: id) as? Phrase,
+              !obj.isDeleted else { return nil }
+        return obj
+    }
+
     // MARK: - Start
 
     func startSession() {
+        guard !didStart else { return } // идемпотентность (headless-старт + возможный .task)
+        didStart = true
         let phrases = flow.orderedSelectedPhrases()
         guard !phrases.isEmpty else { return }
+        phraseObjectIDs = Dictionary(phrases.map { ($0.phraseId, $0.objectID) }, uniquingKeysWith: { a, _ in a })
         let playables = phrases.compactMap {
             PlayablePhrase(phrase: $0, autoSpeedByStatus: flow.config.autoSpeedByStatus)
         }
@@ -58,10 +74,22 @@ final class PlayerViewModel {
         // возвращаемся на главный актор перед обращением к плееру.
         env.audioSession.activate()
         env.audioSession.onInterruptionBegan = { [weak self] in
-            Task { @MainActor in self?.player.pause(); self?.updateNowPlaying() }
+            Task { @MainActor in
+                guard let self else { return }
+                self.wasPlayingBeforeInterruption = self.player.isPlaying // m11
+                self.player.pause()
+                self.updateNowPlaying()
+            }
         }
         env.audioSession.onInterruptionEnded = { [weak self] resume in
-            Task { @MainActor in if resume { self?.player.play(); self?.updateNowPlaying() } }
+            Task { @MainActor in
+                guard let self else { return }
+                // Возобновляем только если система разрешает И сессия играла до прерывания (m11).
+                if resume && self.wasPlayingBeforeInterruption {
+                    self.player.play()
+                    self.updateNowPlaying()
+                }
+            }
         }
         env.audioSession.onRouteChangeShouldPause = { [weak self] in
             Task { @MainActor in self?.player.pause(); self?.updateNowPlaying() }
@@ -81,6 +109,12 @@ final class PlayerViewModel {
         player.onSleepTimerFired = { [weak self] in
             Haptics.success(enabled: self?.env.settings.vibrationEnabled ?? true)
             self?.updateNowPlaying()
+        }
+        // Синхронизация Now Playing/Live Activity при play/pause из интентов/lock screen (C21/m14).
+        player.onPlaybackStateChanged = { [weak self] in
+            guard let self else { return }
+            self.updateNowPlaying()
+            self.liveActivity.update(self.activityState())
         }
 
         player.configure(phrases: playables, config: flow.config)
@@ -103,7 +137,7 @@ final class PlayerViewModel {
     }
 
     func next() {
-        player.nextPhrase()
+        player.skipToNextPhrase()
         updateNowPlaying()
     }
 
@@ -128,7 +162,7 @@ final class PlayerViewModel {
 
     func toggleFavorite() {
         guard let phraseId = player.currentPhrase?.phraseId,
-              let phrase = try? env.repository.phrase(phraseId: phraseId) else { return }
+              let phrase = phrase(for: phraseId) else { return }
         phrase.isFavorite.toggle()
         try? env.viewContext.save()
         isCurrentFavorite = phrase.isFavorite
@@ -137,7 +171,7 @@ final class PlayerViewModel {
     /// Синхронизирует наблюдаемое зеркало избранного (вызывается при смене фразы).
     private func syncFavorite() {
         guard let phraseId = player.currentPhrase?.phraseId,
-              let phrase = try? env.repository.phrase(phraseId: phraseId) else {
+              let phrase = phrase(for: phraseId) else {
             isCurrentFavorite = false
             return
         }
@@ -148,7 +182,8 @@ final class PlayerViewModel {
 
     private func handlePhraseCompleted(_ phraseId: String) {
         guard flow.config.trackProgress else { return }
-        guard let phrase = try? env.repository.phrase(phraseId: phraseId) else { return }
+        // Адресуем именно проигрываемую фразу по objectID (не глобальный fetch, m19).
+        guard let phrase = phrase(for: phraseId) else { return }
         if let transition = env.srs.registerReview(phrase) {
             transitions.append(transition)
         }
@@ -179,8 +214,6 @@ final class PlayerViewModel {
             }
             try? env.viewContext.save()
 
-            // Прогресс урока — только для сессии одного урока (для «Сессии дня» lesson == nil,
-            // статусы фраз уже обновлены SRS в их родных уроках).
             if let lesson = flow.lesson {
                 SessionCompletion.applyLessonProgress(
                     env: env, lesson: lesson,
@@ -188,6 +221,9 @@ final class PlayerViewModel {
                     phrasesReviewed: player.completedPhraseIds.count,
                     completedAt: completedAt
                 )
+            } else {
+                // «Сессия дня»: пересчитываем счётчики прогресса всех затронутых родных уроков (C16).
+                recomputeAffectedLessons()
             }
         }
 
@@ -223,6 +259,22 @@ final class PlayerViewModel {
         } else {
             finish()
         }
+    }
+
+    /// Пересчитывает LessonProgress уроков, чьи фразы участвовали в кросс-урочной сессии (C16).
+    private func recomputeAffectedLessons() {
+        var lessons: [NSManagedObjectID: Lesson] = [:]
+        for id in phraseObjectIDs.values {
+            guard let phrase = try? env.viewContext.existingObject(with: id) as? Phrase,
+                  !phrase.isDeleted, let lesson = phrase.lesson else { continue }
+            lessons[lesson.objectID] = lesson
+        }
+        for lesson in lessons.values {
+            let progress = lesson.progress ?? LessonProgress(context: env.viewContext)
+            progress.lesson = lesson
+            env.repository.recomputeProgressCounters(progress, lesson: lesson)
+        }
+        try? env.viewContext.save()
     }
 
     /// Отмена сессии без единой завершённой фразы: чистим запись и lock screen.
@@ -270,10 +322,10 @@ final class PlayerViewModel {
         env.lockScreen.update(
             textEs: phrase.textEs,
             textRu: phrase.textRu,
-            lessonTitle: flow.lesson?.titleRu ?? "",
+            lessonTitle: flow.sessionTitle,
             duration: player.currentDuration,
             elapsed: player.currentTime,
-            rate: player.isPlaying ? player.speed : 0,
+            rate: player.nowPlayingRate, // m17: эффективная скорость для аудио, 1.0 для паузы, 0 на стопе
             trackNumber: player.currentPhraseIndex + 1,
             trackCount: player.totalPhrases,
             textMode: flow.config.lockScreenTextMode,

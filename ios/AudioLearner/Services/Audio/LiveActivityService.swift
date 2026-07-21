@@ -28,4 +28,12 @@ final class LiveActivityService {
         Task { await current.end(.init(state: finalState, staleDate: nil), dismissalPolicy: .immediate) }
         activity = nil
     }
+
+    /// Завершает все Live Activity этого типа (при старте — подметаем осиротевшие после kill, C13).
+    func endAllOrphans() {
+        activity = nil
+        for activity in Activity<SessionActivityAttributes>.activities {
+            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+        }
+    }
 }

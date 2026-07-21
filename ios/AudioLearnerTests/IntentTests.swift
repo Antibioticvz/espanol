@@ -26,6 +26,14 @@ final class IntentTests: AudioLearnerTestCase {
         XCTAssertTrue(env.sessionFlow.isDailySession)
         XCTAssertNil(env.sessionFlow.lesson)
         XCTAssertFalse(env.sessionFlow.orderedSelectedPhrases().isEmpty)
+        // C12: интент реально запускает воспроизведение (раннер + плеер настроены), не просто ставит step.
+        XCTAssertEqual(env.sessionFlow.step, .player)
+        XCTAssertNotNil(env.activeAudioSession)
+        XCTAssertFalse(env.sessionFlow.player.phrases.isEmpty)
+        // Плеер действительно играет: isPlaying и загруженная длительность > 0 (реальное аудио).
+        XCTAssertTrue(env.sessionFlow.player.isPlaying, "аудио стартовало из интента, не ждём view")
+        XCTAssertGreaterThan(env.sessionFlow.player.currentDuration, 0, "загружен и играет реальный клип")
+        env.endActiveSession(abandoned: true)
     }
 
     func testStartDailyIntentNothingToReview() async throws {

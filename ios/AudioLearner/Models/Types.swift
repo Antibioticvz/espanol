@@ -190,6 +190,9 @@ enum ImportError: LocalizedError, Equatable {
     case unsupportedSchemaVersion(String)
     case missingAudioFile(String)
     case copyFailed(String)
+    case invalidTopicId(String)
+    case invalidAudioPath(String)
+    case tooLarge(String)
 
     var errorDescription: String? {
         switch self {
@@ -205,6 +208,12 @@ enum ImportError: LocalizedError, Equatable {
             return "Отсутствует аудио-файл: \(path)"
         case .copyFailed(let detail):
             return "Ошибка копирования файлов: \(detail)"
+        case .invalidTopicId(let id):
+            return "Некорректный идентификатор темы: \(id)"
+        case .invalidAudioPath(let path):
+            return "Некорректный путь аудио: \(path)"
+        case .tooLarge(let detail):
+            return "Урок слишком большой: \(detail)"
         }
     }
 }

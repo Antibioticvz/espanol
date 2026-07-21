@@ -1,3 +1,4 @@
+import ActivityKit
 import CoreData
 import Foundation
 import Observation
@@ -19,6 +20,8 @@ final class AppEnvironment {
     @ObservationIgnored let audioSession = AudioSessionManager.shared
     /// Единый сервис lock screen на процесс (иначе копятся зомби remote-таргеты).
     @ObservationIgnored let lockScreen = LockScreenService()
+    /// Единый сервис Live Activity на процесс (владелец — env, а не транзиентный VM, C13).
+    @ObservationIgnored let liveActivity = LiveActivityService()
     /// ObjectID незавершённой сессии (для отмены при старте новой).
     @ObservationIgnored var activeSessionID: NSManagedObjectID?
 
@@ -28,6 +31,8 @@ final class AppEnvironment {
     var pendingImportURL: URL?
     /// Флоу текущей сессии.
     let sessionFlow: SessionFlow
+    /// Активный раннер аудио-сессии (владелец — env; позволяет headless-старт из интента, C12).
+    var activeAudioSession: PlayerViewModel?
 
     init(inMemory: Bool = false) {
         let persistence = PersistenceController(inMemory: inMemory)
@@ -49,8 +54,13 @@ final class AppEnvironment {
         IntentActionCoordinator.shared.onStartDailySession = { [weak self] in
             self?.startDailySession() ?? false
         }
+        // pause/resume идут через shared-плеер; onPlaybackStateChanged синхронизирует
+        // Now Playing/Live Activity (C21).
         IntentActionCoordinator.shared.onPauseSession = { [weak self] in
             self?.sessionFlow.player.pause()
+        }
+        IntentActionCoordinator.shared.onResumeSession = { [weak self] in
+            self?.sessionFlow.player.play()
         }
     }
 
@@ -60,9 +70,19 @@ final class AppEnvironment {
         AppPaths.ensureDirectories()
         FileImportService.sweepTempImports() // подметаем осиротевшие папки импорта
         cleanupOrphanSessions()              // сессии, брошенные из-за kill приложения
+        liveActivity.endAllOrphans()         // осиротевшие Live Activity после kill (C13)
         audioSession.activate()
         backup.createDailyBackupIfNeeded(settings: settings.snapshot())
         refreshWidgetStats()
+    }
+
+    /// Headless-запуск аудио-плеера: создаёт раннер и стартует воспроизведение без ожидания
+    /// появления SessionPlayerView (нужно для старта из виджета/Siri, C12).
+    func beginAudioPlayback() {
+        let runner = PlayerViewModel(env: self, flow: sessionFlow)
+        activeAudioSession = runner
+        sessionFlow.step = .player
+        runner.startSession()
     }
 
     /// Начинает сессию для урока: гасит прежнюю сессию, переключает вкладку и открывает выбор фраз.
@@ -87,14 +107,23 @@ final class AppEnvironment {
         guard !phrases.isEmpty else { return false }
         sessionFlow.beginDaily(phrases: phrases, settings: settings)
         selectedTab = .session
+        // «Сессия дня» стартует сразу: аудио — headless (работает из виджета/Siri, C12),
+        // флеш-карты интерактивны (стартуют при появлении FlashcardView).
+        if sessionFlow.config.playbackMode.isAudioQueue {
+            beginAudioPlayback()
+        } else {
+            sessionFlow.step = .player
+        }
         return true
     }
 
-    /// Останавливает активное воспроизведение, очищает lock screen и, если незавершённая
-    /// сессия брошена, удаляет её запись (не засчитывается в историю).
+    /// Останавливает активное воспроизведение, очищает lock screen/Live Activity и, если
+    /// незавершённая сессия брошена, удаляет её запись (не засчитывается в историю).
     func endActiveSession(abandoned: Bool) {
         sessionFlow.player.reset()
         lockScreen.clear()
+        liveActivity.end() // завершаем Live Activity прежней сессии (C13)
+        activeAudioSession = nil
         if abandoned, let id = activeSessionID,
            let session = try? viewContext.existingObject(with: id) as? LearningSession,
            session.completedAt == nil {

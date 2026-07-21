@@ -29,12 +29,13 @@ struct StatsProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (StatsEntry) -> Void) {
-        completion(StatsEntry(date: Date(), stats: WidgetSharedStore.read()))
+        let now = Date()
+        completion(StatsEntry(date: now, stats: Self.todayStats(now: now)))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<StatsEntry>) -> Void) {
         let now = Date()
-        let stats = WidgetSharedStore.read()
+        let stats = Self.todayStats(now: now)
         var entries = [StatsEntry(date: now, stats: stats)]
 
         // Вторая запись на начало следующего дня с нулями: после полуночи «Сегодня»
@@ -48,6 +49,10 @@ struct StatsProvider: TimelineProvider {
             ))
         }
         completion(Timeline(entries: entries, policy: .atEnd))
+    }
+
+    static func todayStats(now: Date) -> WidgetSharedStore.DailyStats {
+        WidgetSharedStore.readNormalized(now: now)
     }
 }
 

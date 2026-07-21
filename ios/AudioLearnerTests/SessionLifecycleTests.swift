@@ -24,7 +24,7 @@ final class SessionLifecycleTests: AudioLearnerTestCase {
         let player = env.sessionFlow.player
 
         player.configure(phrases: playables(lesson), config: .default)
-        player.nextPhrase() // сдвигаем индекс без воспроизведения (autoplay=false)
+        player.skipToNextPhrase() // сдвигаем индекс без воспроизведения (autoplay=false)
         XCTAssertEqual(player.currentPhraseIndex, 1)
 
         env.startSession(for: lesson)
@@ -111,17 +111,22 @@ final class SessionLifecycleTests: AudioLearnerTestCase {
         XCTAssertFalse(player.isSleepActive, "таймер сброшен после срабатывания")
     }
 
-    // v1.2 B: старт «Сессии дня» кросс-урочно (lesson == nil).
-    func testStartDailySessionCrossLesson() throws {
+    // v1.2 B/C12: «Сессия дня» кросс-урочна (lesson==nil) и СРАЗУ стартует воспроизведение
+    // headless (без ожидания view) — регресс на C12.
+    func testStartDailySessionCrossLessonStartsPlayback() throws {
         let env = AppEnvironment(inMemory: true)
         _ = try importFixture(into: env)
         let started = env.startDailySession()
         XCTAssertTrue(started)
         XCTAssertTrue(env.sessionFlow.isDailySession)
         XCTAssertNil(env.sessionFlow.lesson)
-        XCTAssertEqual(env.sessionFlow.step, .config)
-        XCTAssertFalse(env.sessionFlow.orderedSelectedPhrases().isEmpty)
         XCTAssertEqual(env.sessionFlow.sessionTitle, "Сессия дня")
+        // C12: аудио стартует сразу — step=.player, раннер создан, плеер настроен, сессия записана.
+        XCTAssertEqual(env.sessionFlow.step, .player)
+        XCTAssertNotNil(env.activeAudioSession)
+        XCTAssertFalse(env.sessionFlow.player.phrases.isEmpty)
+        XCTAssertNotNil(env.activeSessionID, "LearningSession создана headless-стартом")
+        env.endActiveSession(abandoned: true)
     }
 
     // MINOR 11: завершение без единой фразы — отмена (сессия не засчитывается).
