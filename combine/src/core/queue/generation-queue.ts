@@ -144,11 +144,24 @@ export class GenerationQueue extends EventEmitter {
     }
   }
 
-  /** Останавливает выдачу НОВЫХ задач. Уже стартовавшие задачи доводятся до конца (done/failed). */
+  /**
+   * Останавливает выдачу НОВЫХ задач. Уже стартовавшие задачи доводятся до конца (done/failed).
+   *
+   * ВАЖНО: обязательно чистим внутреннюю очередь p-queue (queue.clear()) — иначе задачи,
+   * которые уже были добавлены в p-queue предыдущим start(), но ещё не начали выполняться
+   * (ждут свободного слота concurrency), остаются в её внутреннем списке. При resume()->start()
+   * они заново проходят фильтр pending/failed (их GenerationTask.status ещё 'pending', т.к.
+   * runTask() для них не вызывался) и добавляются В ДОПОЛНЕНИЕ к уже сидящим в p-queue —
+   * фраза озвучивается ДВАЖДЫ (двойная стоимость у реального API, гонка при записи файла).
+   * clear() безопасен: сами GenerationTask остаются 'pending' и корректно подхватятся заново
+   * следующим start(), но уже ровно одним queue.add().
+   */
   pause(): void {
     if (this.runState !== 'running') return
     this.runState = 'paused'
     this.pQueue?.pause()
+    this.pQueue?.clear()
+    this.resetGeneratingToPending()
     this.emitProgress()
   }
 
@@ -158,16 +171,32 @@ export class GenerationQueue extends EventEmitter {
     await this.start()
   }
 
-  /** Как pause(), но также сбрасывает ещё не начатые задачи из внутренней очереди p-queue. */
+  /** Как pause(), но семантически финальна (runState='cancelled'). */
   cancel(): void {
     this.runState = 'cancelled'
     this.pQueue?.pause()
     this.pQueue?.clear()
+    this.resetGeneratingToPending()
     this.emitProgress()
+  }
+
+  /**
+   * Задачи, застрявшие в 'generating' на момент pause()/cancel(), возвращаем в 'pending' —
+   * иначе задача, отменённая между синтезом ES и RU (см. runTask: ранний return после ES,
+   * если runState стал 'cancelled'), навсегда остаётся в 'generating': resume() фильтрует
+   * только pending/failed, такая фраза больше никогда не попадёт в очередь и урок не завершится.
+   */
+  private resetGeneratingToPending(): void {
+    for (const t of this.tasks) {
+      if (t.status === 'generating') t.status = 'pending'
+    }
   }
 
   private async runTask(task: GenerationTask): Promise<void> {
     if (this.runState === 'cancelled') return
+    // Идемпотентность/защита от двойной постановки в очередь (см. докстринг pause() выше):
+    // если эта же задача каким-то образом уже выполнена — не переозвучиваем и не перезаписываем файл.
+    if (task.status === 'done') return
     task.status = 'generating'
     this.emitProgress({
       currentItemId: task.phraseId,

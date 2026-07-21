@@ -51,6 +51,17 @@ export interface ParsedBlockStory {
 
 export type ParsedBlock = ParsedBlockGroups | ParsedBlockVocabulary | ParsedBlockStory
 
+/**
+ * Type guard, а не `block.type === 'verb_group' || block.type === 'phrase_group'` напрямую:
+ * TypeScript не умеет сузить объединение по дискриминанту, значения которого сами являются
+ * union'ом (`type: 'verb_group' | 'phrase_group'`), через `||`-сравнение в if/else-if цепочке —
+ * итоговый `else` остаётся `ParsedBlockGroups | ParsedBlockStory` вместо чистого ParsedBlockStory.
+ * Явный type guard узнаётся корректно. Проверено репродукцией на изолированном примере.
+ */
+export function isGroupsBlock(block: ParsedBlock): block is ParsedBlockGroups {
+  return block.type === 'verb_group' || block.type === 'phrase_group'
+}
+
 export interface LanguageVariants {
   spanishRegion?: string
   speedMultiplier?: number

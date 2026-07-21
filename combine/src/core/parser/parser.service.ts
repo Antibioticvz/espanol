@@ -8,7 +8,7 @@ import type {
   ParserStats,
   LanguageVariants
 } from '../types/parsed-lesson'
-import { emptyStats } from '../types/parsed-lesson'
+import { emptyStats, isGroupsBlock } from '../types/parsed-lesson'
 import type { BlockType } from '../types/lesson-json'
 import { extractFrontMatter } from './front-matter'
 import { pad2, slugify } from '../util/slug'
@@ -48,7 +48,11 @@ export class ParserService {
   parse(raw: string): ParseResult {
     const errors: ParseIssue[] = []
     const warnings: ParseIssue[] = []
-    const lines = raw.split(/\r\n|\r|\n/)
+    // Срезаем UTF-8 BOM (U+FEFF), если он есть — иначе он прилипает к первому символу первой
+    // строки и ломает и обнаружение front-matter (lines[0].trim() !== '---'), и line.startsWith('#TOPIC').
+    // Некоторые редакторы (особенно на Windows) сохраняют .txt в UTF-8 с BOM по умолчанию.
+    const withoutBom = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw
+    const lines = withoutBom.split(/\r\n|\r|\n/)
 
     let frontMatter: Record<string, unknown> | null = null
     let startIndex = 0
@@ -495,7 +499,7 @@ export function computeStats(lesson: ParsedLesson): ParserStats {
   let charactersRu = 0
 
   for (const block of lesson.blocks) {
-    if (block.type === 'verb_group' || block.type === 'phrase_group') {
+    if (isGroupsBlock(block)) {
       for (const group of block.groups) {
         for (const phrase of group.phrases) {
           phraseCount += 1

@@ -256,6 +256,18 @@ describe('ParserService — ошибки формата', () => {
     expect(result.lesson).toBeNull()
     expect(result.errors.length).toBeGreaterThan(0)
   })
+
+  it('РЕГРЕССИЯ: UTF-8 BOM (\\uFEFF) в начале файла срезается и не ломает #TOPIC/front-matter', () => {
+    const withBomNoFrontMatter = '﻿#TOPIC 1 | Тема\n##BLOCK vocabulary | Лексика\nel gato | кот\n'
+    const result = parser.parse(withBomNoFrontMatter)
+    expect(result.errors).toEqual([])
+    expect(result.lesson?.topicNumber).toBe(1)
+
+    const withBomAndFrontMatter = '﻿---\ntopic_id: 01-bom-test\n---\n#TOPIC 1 | Тема\n##BLOCK vocabulary | Лексика\nel gato | кот\n'
+    const result2 = parser.parse(withBomAndFrontMatter)
+    expect(result2.errors).toEqual([])
+    expect(result2.lesson?.topicId).toBe('01-bom-test')
+  })
 })
 
 describe('ParserService — реальные уроки курса shared/course/*.txt', () => {

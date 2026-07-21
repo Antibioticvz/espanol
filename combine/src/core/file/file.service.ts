@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import NodeID3 from 'node-id3'
 import AdmZip from 'adm-zip'
-import Ajv, { type ValidateFunction } from 'ajv'
+import Ajv, { type AnySchema, type ValidateFunction } from 'ajv'
 import addFormats from 'ajv-formats'
 import type { LessonJson, PhraseJson, Provider } from '../types/lesson-json'
 
@@ -66,7 +66,7 @@ let cachedSchemaPath: string | null = null
 
 async function getValidator(schemaPath: string): Promise<ValidateFunction> {
   if (cachedValidator && cachedSchemaPath === schemaPath) return cachedValidator
-  const schema: unknown = JSON.parse(await readFile(schemaPath, 'utf8'))
+  const schema = JSON.parse(await readFile(schemaPath, 'utf8')) as AnySchema
   const ajv = new Ajv({ allErrors: true, strict: false })
   addFormats(ajv)
   cachedValidator = ajv.compile(schema)

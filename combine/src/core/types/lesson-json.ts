@@ -83,6 +83,15 @@ export interface BlockStoryJson {
 
 export type BlockJson = BlockGroupsJson | BlockVocabularyJson | BlockStoryJson
 
+/**
+ * Type guard вместо `block.type === 'verb_group' || block.type === 'phrase_group'` напрямую —
+ * см. идентичный комментарий у isGroupsBlock() в parsed-lesson.ts (TS не сужает union по
+ * дискриминанту с union-значением через `||` в if/else-if цепочке).
+ */
+export function isGroupsBlockJson(block: BlockJson): block is BlockGroupsJson {
+  return block.type === 'verb_group' || block.type === 'phrase_group'
+}
+
 export interface LessonConfigJson {
   provider: Provider
   model: string

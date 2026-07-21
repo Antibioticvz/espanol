@@ -1,7 +1,8 @@
 import { join } from 'node:path'
 import type { ParsedLesson, ParsedPhrase } from '../types/parsed-lesson'
+import { isGroupsBlock } from '../types/parsed-lesson'
 import type { BlockJson, GroupJson, LessonJson, PhraseJson, Provider, VoiceRef } from '../types/lesson-json'
-import { GENERATOR_VERSION, SCHEMA_VERSION } from '../types/lesson-json'
+import { GENERATOR_VERSION, SCHEMA_VERSION, isGroupsBlockJson } from '../types/lesson-json'
 import type { GenerationTask } from '../types/generation'
 import { pad2 } from '../util/slug'
 
@@ -57,7 +58,7 @@ export function buildLessonSkeleton(
   }
 ): LessonJson {
   const blocks: BlockJson[] = lesson.blocks.map((block) => {
-    if (block.type === 'verb_group' || block.type === 'phrase_group') {
+    if (isGroupsBlock(block)) {
       const groups: GroupJson[] = block.groups.map((g) => ({
         key: g.key,
         title_ru: g.titleRu,
@@ -180,7 +181,7 @@ export function flattenToTasks(lessonJson: LessonJson, audioRoot: string, voices
   }
 
   for (const block of lessonJson.blocks) {
-    if (block.type === 'verb_group' || block.type === 'phrase_group') {
+    if (isGroupsBlockJson(block)) {
       for (const group of block.groups) {
         for (const phrase of group.phrases) {
           pushTask(phrase.id, block.block_id, block.type, group.key, phrase.es, phrase.ru, phrase.audio.es, phrase.audio.ru, phrase.status)
@@ -199,10 +200,20 @@ export function flattenToTasks(lessonJson: LessonJson, audioRoot: string, voices
   return tasks
 }
 
-/** Находит JSON-узел (phrase/word/story) по задаче и применяет к нему patch. Мутирует lessonJson. */
+/**
+ * Находит JSON-узел (phrase/word/story) по задаче и применяет к нему patch. Мутирует lessonJson.
+ *
+ * ВАЖНО: промах поиска (нет блока/группы/фразы с таким id) логируется через console.warn, а не
+ * тихо игнорируется — иначе результат генерации (готовый MP3, статус done) молча теряется,
+ * а фраза в lesson.json навсегда останется pending, при этом ни в логах, ни в UI не будет ни
+ * малейшего намёка на причину.
+ */
 export function applyTaskResult(lessonJson: LessonJson, task: GenerationTask): void {
   const block = lessonJson.blocks.find((b) => b.block_id === task.blockId)
-  if (!block) return
+  if (!block) {
+    console.warn(`[build-items] applyTaskResult: не найден block_id="${task.blockId}" для задачи ${task.phraseId} — результат потерян.`)
+    return
+  }
 
   const patch = {
     status: task.status,
@@ -217,27 +228,56 @@ export function applyTaskResult(lessonJson: LessonJson, task: GenerationTask): v
   }
   if (block.type === 'vocabulary') {
     const word = block.words.find((w) => w.id === task.phraseId)
-    if (word) Object.assign(word, patch)
+    if (!word) {
+      console.warn(`[build-items] applyTaskResult: не найдено слово id="${task.phraseId}" в блоке ${task.blockId} — результат потерян.`)
+      return
+    }
+    Object.assign(word, patch)
     return
   }
   const group = block.groups.find((g) => g.key === task.groupKey)
-  const phrase = group?.phrases.find((p) => p.id === task.phraseId)
-  if (phrase) Object.assign(phrase, patch)
+  if (!group) {
+    console.warn(
+      `[build-items] applyTaskResult: не найдена группа key="${task.groupKey}" в блоке ${task.blockId} — результат потерян.`
+    )
+    return
+  }
+  const phrase = group.phrases.find((p) => p.id === task.phraseId)
+  if (!phrase) {
+    console.warn(`[build-items] applyTaskResult: не найдена фраза id="${task.phraseId}" в группе "${task.groupKey}" — результат потерян.`)
+    return
+  }
+  Object.assign(phrase, patch)
 }
 
 export function markId3Written(lessonJson: LessonJson, task: GenerationTask): void {
   const block = lessonJson.blocks.find((b) => b.block_id === task.blockId)
-  if (!block) return
+  if (!block) {
+    console.warn(`[build-items] markId3Written: не найден block_id="${task.blockId}" для задачи ${task.phraseId}.`)
+    return
+  }
   if (block.type === 'story') {
     block.id3_tags_written = true
     return
   }
   if (block.type === 'vocabulary') {
     const word = block.words.find((w) => w.id === task.phraseId)
-    if (word) word.id3_tags_written = true
+    if (!word) {
+      console.warn(`[build-items] markId3Written: не найдено слово id="${task.phraseId}" в блоке ${task.blockId}.`)
+      return
+    }
+    word.id3_tags_written = true
     return
   }
   const group = block.groups.find((g) => g.key === task.groupKey)
-  const phrase = group?.phrases.find((p) => p.id === task.phraseId)
-  if (phrase) phrase.id3_tags_written = true
+  if (!group) {
+    console.warn(`[build-items] markId3Written: не найдена группа key="${task.groupKey}" в блоке ${task.blockId}.`)
+    return
+  }
+  const phrase = group.phrases.find((p) => p.id === task.phraseId)
+  if (!phrase) {
+    console.warn(`[build-items] markId3Written: не найдена фраза id="${task.phraseId}" в группе "${task.groupKey}".`)
+    return
+  }
+  phrase.id3_tags_written = true
 }

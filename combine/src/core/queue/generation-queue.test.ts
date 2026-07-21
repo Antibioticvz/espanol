@@ -170,22 +170,64 @@ describe('GenerationQueue', () => {
     expect(fixedProvider.calls).not.toContain('es-ok') // done-задача не переигрывается новым экземпляром очереди
   })
 
-  it('cancel() переводит очередь в состояние cancelled и не запускает ещё не начатые задачи', async () => {
+  it('cancel() переводит очередь в cancelled; ещё не начатые и прерванные на середине задачи возвращаются в pending (без сирот)', async () => {
     const tasks = Array.from({ length: 4 }, (_, i) => makeTask(dir, `p${i}`))
     const provider = new FakeProvider({ delayMs: 30 })
     const queue = new GenerationQueue(tasks, { ...CONFIG, concurrency: 1 }, provider, CTX)
 
     const runPromise = queue.start()
-    await sleep(10)
+    await sleep(10) // p0 в процессе (ES), p1..p3 ещё не начаты
     queue.cancel()
     expect(queue.getRunState()).toBe('cancelled')
     await runPromise.catch(() => undefined)
-    await sleep(50)
+    await sleep(80) // даём фоновому ES-запросу p0 реально завершиться (мы его не прерываем физически)
 
-    const notPending = tasks.filter((t) => t.status !== 'pending')
-    // Как минимум одна задача (уже стартовавшая на момент cancel) успела завершиться; остальные остались pending.
-    expect(notPending.length).toBeGreaterThanOrEqual(1)
-    expect(tasks.some((t) => t.status === 'pending')).toBe(true)
+    // Ни одна задача не должна зависнуть в 'generating' (см. регрессионный тест ниже) — раз cancel()
+    // случился до того, как p0 успел завершить ES+RU целиком, задача откатывается в pending и готова
+    // быть подхваченной повторным resume()/start(), а не теряется молча.
+    expect(tasks.every((t) => t.status === 'pending')).toBe(true)
+  })
+
+  it('РЕГРЕССИЯ: pause() сразу после старта не приводит к двойному выполнению задач при resume() (не должны дублироваться в p-queue)', async () => {
+    // concurrency=1: task p0 стартует сразу, p1..p3 остаются НЕ начатыми во внутренней очереди p-queue.
+    const tasks = Array.from({ length: 4 }, (_, i) => makeTask(dir, `p${i}`))
+    const provider = new FakeProvider({ delayMs: 20 })
+    const queue = new GenerationQueue(tasks, { ...CONFIG, concurrency: 1 }, provider, CTX)
+
+    const runPromise = queue.start()
+    await sleep(5) // p0 уже в процессе (ES), p1..p3 сидят в очереди p-queue, ещё не стартовав
+    queue.pause()
+    await queue.resume()
+    await runPromise.catch(() => undefined)
+    while (tasks.some((t) => t.status === 'pending' || t.status === 'generating')) {
+      await sleep(10)
+    }
+
+    expect(tasks.every((t) => t.status === 'done')).toBe(true)
+    // Без фикса p1..p3 (не начатые на момент pause) добавлялись бы в очередь ПОВТОРНО при resume(),
+    // и provider.synthesize() вызывался бы для их текста дважды.
+    for (const t of tasks) {
+      const esCalls = provider.calls.filter((c) => c === t.esText).length
+      const ruCalls = provider.calls.filter((c) => c === t.ruText).length
+      expect(esCalls).toBe(1)
+      expect(ruCalls).toBe(1)
+    }
+  })
+
+  it('РЕГРЕССИЯ: cancel() между синтезом ES и RU не оставляет задачу навечно в "generating"', async () => {
+    const tasks = [makeTask(dir, 'p0'), makeTask(dir, 'p1')]
+    const provider = new FakeProvider({ delayMs: 30 })
+    const queue = new GenerationQueue(tasks, { ...CONFIG, concurrency: 1 }, provider, CTX)
+
+    const runPromise = queue.start()
+    await sleep(10) // p0 в процессе синтеза ES
+    queue.cancel()
+    // Сразу после cancel() ни одна задача не должна остаться в 'generating' — иначе resume()
+    // (который берёт только pending/failed) никогда её не подхватит и урок не завершится.
+    expect(tasks.some((t) => t.status === 'generating')).toBe(false)
+    await runPromise.catch(() => undefined)
+    await sleep(60) // даём фоновому ES-запросу для p0 (уже не отменяемому) реально завершиться
+    expect(tasks.some((t) => t.status === 'generating')).toBe(false)
   })
 
   it('считает live-стоимость (spentUsd) по фактическим символам и цене за 1000 символов', async () => {
