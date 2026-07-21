@@ -56,8 +56,12 @@ function resetItemStatus(item: { status: ItemStatus; error?: string | null }, mo
  *    перекрёстная порча. Теперь оба метода бросают, если isActive().
  *  - isActive() никогда не возвращала false обратно (queue не обнулялся) — теперь finalize()
  *    (в finally, чтобы отработало и при ошибке записи) обнуляет this.queue.
+ *
+ * Класс экспортирован (не только синглтон-инстанс ниже) специально для тестов — позволяет
+ * создавать изолированные инстансы с замоканным services-bootstrap#getAppContext() вместо
+ * общего состояния синглтона.
  */
-class GenerationSession {
+export class GenerationSession {
   private queue: GenerationQueue | null = null
   private lessonJson: LessonJson | null = null
   private tasks: GenerationTask[] = []
