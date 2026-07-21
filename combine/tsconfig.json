@@ -1,7 +1,4 @@
 {
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.node.json" },
-    { "path": "./tsconfig.web.json" }
-  ]
+  "//": "Инертный корневой tsconfig — реальные проверки типов используют tsconfig.node.json (main/preload/core/cli) и tsconfig.web.json (renderer) напрямую через `npm run typecheck`. Не используем project references/composite здесь намеренно, чтобы `tsc --noEmit -p ...` не писал .tsbuildinfo в репозиторий.",
+  "files": []
 }
