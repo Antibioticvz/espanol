@@ -9,6 +9,8 @@ release/
 # Electron
 combine/.vite/
 combine/dist-electron/
+combine/.tsbuildinfo-node/
+combine/.tsbuildinfo-web/
 
 # macOS
 .DS_Store
