@@ -18,6 +18,7 @@ struct SessionResult {
 }
 
 /// Координатор флоу сессии: выбор фраз → настройки → плеер → итоги (спека §4.4–4.7).
+@MainActor
 @Observable
 final class SessionFlow {
     enum Step: Hashable {

@@ -2,6 +2,7 @@ import Foundation
 import Observation
 
 /// Выбор фраз для сессии: дерево, фильтры, поиск, массовые операции (спека §4.4).
+@MainActor
 @Observable
 final class PhraseSelectionViewModel {
     @ObservationIgnored let lesson: Lesson

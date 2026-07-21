@@ -36,6 +36,7 @@ struct LessonStatsRow: Identifiable {
 }
 
 /// Экран статистики: периоды, сводка, streak, heatmap, слова к повтору, экспорт (спека §4.8).
+@MainActor
 @Observable
 final class StatisticsViewModel {
     @ObservationIgnored let env: AppEnvironment

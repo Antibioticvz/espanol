@@ -14,8 +14,8 @@ public final class LearningSession: NSManagedObject {
     /// Средняя скорость (для достижений speedDemon).
     @NSManaged public var speed: Double
 
-    // Связи
-    @NSManaged public var lesson: Lesson
+    // Связи. lesson опционален (D-17): сессия переживает удаление урока.
+    @NSManaged public var lesson: Lesson?
     @NSManaged public var phraseUpdates: Set<PhraseStateUpdate>
 
     @nonobjc public class func fetchRequest() -> NSFetchRequest<LearningSession> {

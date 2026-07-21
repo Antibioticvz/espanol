@@ -58,6 +58,11 @@ final class LessonRepository {
         let easeFactor: Double
         let interval: Int64
         let isFavorite: Bool
+        // Статистика фразы (иначе теряется при cascade-удалении старой PhraseStatistics).
+        let statsTotalReviewCount: Int64
+        let statsCorrectCount: Int64
+        let statsLastReviewedAt: Date?
+        let statsAverageReviewTime: Double
     }
 
     /// Индексирует урок из манифеста, беря аудио из `sourceRoot`.
@@ -83,7 +88,11 @@ final class LessonRepository {
                         nextReviewDate: phrase.nextReviewDate,
                         easeFactor: phrase.easeFactor,
                         interval: phrase.interval,
-                        isFavorite: phrase.isFavorite
+                        isFavorite: phrase.isFavorite,
+                        statsTotalReviewCount: phrase.statistics?.totalReviewCount ?? 0,
+                        statsCorrectCount: phrase.statistics?.correctCount ?? 0,
+                        statsLastReviewedAt: phrase.statistics?.lastReviewedAt,
+                        statsAverageReviewTime: phrase.statistics?.averageReviewTime ?? 0
                     )
                 }
                 clearContent(of: existing)
@@ -113,8 +122,10 @@ final class LessonRepository {
         lesson.characterCountRu = Int64(manifest.stats.charactersRu)
 
         var globalPhraseIndex: Int64 = 0
+        var lastSavedPhraseCount: Int64 = 0
+        let batchSize: Int64 = 200 // сброс в стор каждые N фраз (спека §16)
 
-        for (blockIdx, mBlock) in manifest.blocks.enumerated() {
+        for mBlock in manifest.blocks {
             let block = LessonBlock(context: context)
             block.blockId = mBlock.blockId
             block.type = mBlock.type
@@ -156,9 +167,10 @@ final class LessonRepository {
                 break
             }
 
-            // Батчинг: периодически сбрасываем в стор (спека §16).
-            if blockIdx % 5 == 4 {
+            // Батчинг по числу проиндексированных фраз, а не блоков (спека §16).
+            if globalPhraseIndex - lastSavedPhraseCount >= batchSize {
                 try context.save()
+                lastSavedPhraseCount = globalPhraseIndex
             }
         }
 
@@ -196,6 +208,15 @@ final class LessonRepository {
             phrase.easeFactor = snap.easeFactor
             phrase.interval = snap.interval
             phrase.isFavorite = snap.isFavorite
+            // Восстанавливаем статистику фразы.
+            if snap.statsTotalReviewCount > 0 || snap.statsCorrectCount > 0 || snap.statsLastReviewedAt != nil {
+                let stats = PhraseStatistics(context: context)
+                stats.phrase = phrase
+                stats.totalReviewCount = snap.statsTotalReviewCount
+                stats.correctCount = snap.statsCorrectCount
+                stats.lastReviewedAt = snap.statsLastReviewedAt
+                stats.averageReviewTime = snap.statsAverageReviewTime
+            }
         } else {
             phrase.state = PhraseState.learning.rawValue
             phrase.reviewCount = 0

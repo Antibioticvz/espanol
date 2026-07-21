@@ -4,6 +4,7 @@ import Observation
 import WidgetKit
 
 /// Корневой контейнер зависимостей, внедряется в SwiftUI-окружение.
+@MainActor
 @Observable
 final class AppEnvironment {
     let persistence: PersistenceController
@@ -42,6 +43,7 @@ final class AppEnvironment {
 
     func onLaunch() {
         AppPaths.ensureDirectories()
+        FileImportService.sweepTempImports() // подметаем осиротевшие папки импорта
         audioSession.activate()
         backup.createDailyBackupIfNeeded(settings: settings.snapshot())
         refreshWidgetStats()

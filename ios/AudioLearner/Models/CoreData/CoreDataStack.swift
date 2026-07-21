@@ -23,7 +23,7 @@ enum AppPaths {
     }
 }
 
-/// Программная модель CoreData (D-07: без .xcdatamodeld) и контейнер.
+/// Программная модель CoreData (D-16: NSManagedObjectModel в коде, без .xcdatamodeld) и контейнер.
 final class PersistenceController {
     static let shared = PersistenceController()
 
@@ -196,8 +196,10 @@ final class PersistenceController {
             (lesson, "progress", progress, toMany: false, .cascadeDeleteRule),
             (progress, "lesson", lesson, toMany: false, .nullifyDeleteRule)
         )
+        // D-17: сессии переживают удаление урока (nullify), чтобы история активности
+        // и стрик не худели задним числом.
         pair(
-            (lesson, "sessions", session, toMany: true, .cascadeDeleteRule),
+            (lesson, "sessions", session, toMany: true, .nullifyDeleteRule),
             (session, "lesson", lesson, toMany: false, .nullifyDeleteRule)
         )
         pair(

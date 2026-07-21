@@ -3,6 +3,7 @@ import Foundation
 import Observation
 
 /// Управляет жизненным циклом воспроизводимой сессии: очередь, SRS, lock screen, сохранение.
+@MainActor
 @Observable
 final class PlayerViewModel {
     @ObservationIgnored let env: AppEnvironment
@@ -47,17 +48,24 @@ final class PlayerViewModel {
         learningSession = session
         try? env.viewContext.save()
 
-        // Настраиваем аудио-сессию и lock screen.
+        // Настраиваем аудио-сессию и lock screen. Колбэки могут приходить не с main —
+        // возвращаемся на главный актор перед обращением к плееру.
         env.audioSession.activate()
-        env.audioSession.onInterruptionBegan = { [weak self] in self?.player.pause() }
-        env.audioSession.onInterruptionEnded = { [weak self] resume in if resume { self?.player.play() } }
-        env.audioSession.onRouteChangeShouldPause = { [weak self] in self?.player.pause() }
+        env.audioSession.onInterruptionBegan = { [weak self] in
+            Task { @MainActor in self?.player.pause(); self?.updateNowPlaying() }
+        }
+        env.audioSession.onInterruptionEnded = { [weak self] resume in
+            Task { @MainActor in if resume { self?.player.play(); self?.updateNowPlaying() } }
+        }
+        env.audioSession.onRouteChangeShouldPause = { [weak self] in
+            Task { @MainActor in self?.player.pause(); self?.updateNowPlaying() }
+        }
 
         lockScreen.setupRemoteCommands()
-        lockScreen.onPlay = { [weak self] in self?.player.play(); self?.updateNowPlaying() }
-        lockScreen.onPause = { [weak self] in self?.player.pause(); self?.updateNowPlaying() }
-        lockScreen.onNext = { [weak self] in self?.next() }
-        lockScreen.onPrevious = { [weak self] in self?.previous() }
+        lockScreen.onPlay = { [weak self] in Task { @MainActor in self?.player.play(); self?.updateNowPlaying() } }
+        lockScreen.onPause = { [weak self] in Task { @MainActor in self?.player.pause(); self?.updateNowPlaying() } }
+        lockScreen.onNext = { [weak self] in Task { @MainActor in self?.next() } }
+        lockScreen.onPrevious = { [weak self] in Task { @MainActor in self?.previous() } }
 
         // Колбэки плеера.
         player.onPhraseCompleted = { [weak self] phraseId in self?.handlePhraseCompleted(phraseId) }

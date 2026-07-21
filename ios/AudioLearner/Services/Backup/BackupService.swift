@@ -36,6 +36,11 @@ final class BackupService {
         var lastReviewDate: Date?
         var nextReviewDate: Date?
         var isFavorite: Bool
+        // Статистика фразы.
+        var totalReviewCount: Int?
+        var correctCount: Int?
+        var lastReviewedAt: Date?
+        var averageReviewTime: Double?
     }
 
     struct ProgressBackup: Codable {
@@ -58,7 +63,11 @@ final class BackupService {
                     reviewCount: Int(phrase.reviewCount),
                     lastReviewDate: phrase.lastReviewDate,
                     nextReviewDate: phrase.nextReviewDate,
-                    isFavorite: phrase.isFavorite
+                    isFavorite: phrase.isFavorite,
+                    totalReviewCount: phrase.statistics.map { Int($0.totalReviewCount) },
+                    correctCount: phrase.statistics.map { Int($0.correctCount) },
+                    lastReviewedAt: phrase.statistics?.lastReviewedAt,
+                    averageReviewTime: phrase.statistics?.averageReviewTime
                 )
             }
             let progress = lesson.progress.map { p in
@@ -157,6 +166,15 @@ final class BackupService {
                 phrase.lastReviewDate = pb.lastReviewDate
                 phrase.nextReviewDate = pb.nextReviewDate
                 phrase.isFavorite = pb.isFavorite
+                // Восстанавливаем статистику фразы.
+                if pb.totalReviewCount != nil || pb.correctCount != nil || pb.lastReviewedAt != nil {
+                    let stats = phrase.statistics ?? PhraseStatistics(context: repository.context)
+                    stats.phrase = phrase
+                    stats.totalReviewCount = Int64(pb.totalReviewCount ?? 0)
+                    stats.correctCount = Int64(pb.correctCount ?? 0)
+                    stats.lastReviewedAt = pb.lastReviewedAt
+                    stats.averageReviewTime = pb.averageReviewTime ?? 0
+                }
                 updated += 1
             }
             if let pb = lessonBackup.progress, let progress = lesson.progress {

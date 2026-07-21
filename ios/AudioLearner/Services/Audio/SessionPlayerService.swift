@@ -5,6 +5,10 @@ import Observation
 /// Воспроизведение сессии как конечный автомат по «ногам» повторения:
 /// `ES → пауза → RU → пауза`, N повторений на фразу (спека §5).
 /// Скорость 0.5–2.0 без изменения питча через `AVAudioPlayer.enableRate` — меняется на лету.
+///
+/// Класс изолирован на @MainActor: всё состояние и мутации происходят на главном потоке,
+/// а делегатский колбэк (может прийти не с main) заворачивается обратно на main.
+@MainActor
 @Observable
 final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
@@ -34,10 +38,10 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         didSet { player?.rate = Float(speed) }
     }
 
-    // MARK: - Callbacks (не наблюдаются)
-    @ObservationIgnored var onPhraseCompleted: ((String) -> Void)?
-    @ObservationIgnored var onSessionFinished: (() -> Void)?
-    @ObservationIgnored var onItemChanged: (() -> Void)?
+    // MARK: - Callbacks (не наблюдаются; вызываются на main)
+    @ObservationIgnored var onPhraseCompleted: (@MainActor (String) -> Void)?
+    @ObservationIgnored var onSessionFinished: (@MainActor () -> Void)?
+    @ObservationIgnored var onItemChanged: (@MainActor () -> Void)?
 
     // MARK: - Private
     @ObservationIgnored private var player: AVAudioPlayer?
@@ -45,6 +49,15 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
     @ObservationIgnored private var progressTimer: Timer?
     @ObservationIgnored private var pauseRemaining: TimeInterval = 0
     @ObservationIgnored private var pauseStartedAt: Date?
+
+    /// Тихий зациклённый плеер: звучит во время пауз, чтобы iOS не убил фоновую сессию.
+    @ObservationIgnored private lazy var silencePlayer: AVAudioPlayer? = {
+        guard let p = try? AVAudioPlayer(data: SilenceAudio.wavData) else { return nil }
+        p.numberOfLoops = -1
+        p.volume = 0
+        p.prepareToPlay()
+        return p
+    }()
 
     // MARK: - Derived
     var currentPhrase: PlayablePhrase? {
@@ -84,6 +97,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         stopTimers()
         player?.stop()
         player = nil
+        stopSilence()
         isPlaying = false
         isFinished = false
         currentPhraseIndex = 0
@@ -109,6 +123,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         isPlaying = true
         if isInPause {
             resumePause()
+            startSilence()
         } else if let player {
             player.play()
         } else {
@@ -120,7 +135,10 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
     func pause() {
         isPlaying = false
         player?.pause()
-        if isInPause { holdPause() }
+        if isInPause {
+            holdPause()
+            silencePlayer?.pause()
+        }
         stopProgressTimer()
     }
 
@@ -186,6 +204,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
     private func playAudio(url: URL, autoplay: Bool) {
         isInPause = false
+        stopSilence()
         player?.stop()
         do {
             let newPlayer = try AVAudioPlayer(contentsOf: url)
@@ -221,6 +240,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         }
         if autoplay && isPlaying {
             resumePause()
+            startSilence()
             startProgressTimer()
         }
     }
@@ -229,7 +249,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         pauseStartedAt = Date()
         pauseTimer?.invalidate()
         pauseTimer = Timer.scheduledTimer(withTimeInterval: pauseRemaining, repeats: false) { [weak self] _ in
-            self?.pauseFinished()
+            Task { @MainActor in self?.pauseFinished() }
         }
     }
 
@@ -246,7 +266,19 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         isInPause = false
         pauseTimer = nil
         pauseStartedAt = nil
+        stopSilence()
         advanceLeg()
+    }
+
+    // MARK: - Silence during pauses
+
+    private func startSilence() {
+        silencePlayer?.play()
+    }
+
+    private func stopSilence() {
+        silencePlayer?.pause()
+        silencePlayer?.currentTime = 0
     }
 
     /// Переход к следующей «ноге»; по завершении ruPause — новое повторение/фраза.
@@ -313,6 +345,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         stopTimers()
         player?.stop()
         player = nil
+        stopSilence()
         isPlaying = false
         isFinished = true
         isInPause = false
@@ -325,7 +358,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
     private func startProgressTimer() {
         stopProgressTimer()
         progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            self?.tickProgress()
+            Task { @MainActor in self?.tickProgress() }
         }
     }
 
@@ -356,8 +389,14 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
     // MARK: - AVAudioPlayerDelegate
 
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        currentTime = currentDuration
-        advanceLeg()
+    /// Может вызываться не с главного потока — возвращаемся на main перед мутациями.
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            // Игнорируем колбэк тихого плеера (он зациклён и завершиться не должен).
+            guard player !== self.silencePlayer else { return }
+            self.currentTime = self.currentDuration
+            self.advanceLeg()
+        }
     }
 }

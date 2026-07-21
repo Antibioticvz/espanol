@@ -1,7 +1,7 @@
 import Foundation
 import ZIPFoundation
 
-/// Импорт ZIP-урока: распаковка, валидация, копирование, разрешение конфликтов (спека §11).
+/// Импорт ZIP-урока: распаковка, валидация, атомарное копирование, разрешение конфликтов (спека §11).
 final class FileImportService {
     let repository: LessonRepository
 
@@ -9,11 +9,18 @@ final class FileImportService {
         self.repository = repository
     }
 
+    /// Тестовый seam: если задан, вызывается после наполнения staging, но ДО атомарной
+    /// подмены каталога назначения. Бросок отсюда имитирует сбой копирования на середине
+    /// и должен оставить существующий урок нетронутым.
+    var beforeSwapHook: (() throws -> Void)?
+
     /// Результат распаковки и валидации — используется для показа инфо до импорта.
     struct Prepared {
         let manifest: LessonManifest
         /// Каталог с распакованным содержимым (lesson.json + audio/).
         let extractedRoot: URL
+        /// Корневая временная папка распаковки (для гарантированной уборки).
+        let tempDir: URL
         /// Существует ли уже урок с таким topic_id.
         let hasConflict: Bool
     }
@@ -22,86 +29,124 @@ final class FileImportService {
 
     /// Распаковывает ZIP во временную папку, парсит и валидирует lesson.json,
     /// проверяет наличие всех аудио-файлов. Не пишет в CoreData.
+    /// При любой ошибке временная папка удаляется.
     func prepare(zipURL: URL) throws -> Prepared {
         AppPaths.ensureDirectories()
-        let extractedRoot = AppPaths.tempImportsDirectory
+        let tempDir = AppPaths.tempImportsDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try? FileManager.default.removeItem(at: extractedRoot)
-        try FileManager.default.createDirectory(at: extractedRoot, withIntermediateDirectories: true)
-
-        // Некоторые ZIP оборачивают содержимое в одну корневую папку — учитываем это.
-        let needsSecurityScope = zipURL.startAccessingSecurityScopedResource()
-        defer { if needsSecurityScope { zipURL.stopAccessingSecurityScopedResource() } }
+        try? FileManager.default.removeItem(at: tempDir)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
         do {
-            try FileManager.default.unzipItem(at: zipURL, to: extractedRoot)
-        } catch {
-            throw ImportError.cannotOpenArchive
-        }
+            let needsSecurityScope = zipURL.startAccessingSecurityScopedResource()
+            defer { if needsSecurityScope { zipURL.stopAccessingSecurityScopedResource() } }
 
-        let contentRoot = try locateContentRoot(in: extractedRoot)
-
-        let jsonURL = contentRoot.appendingPathComponent("lesson.json")
-        guard FileManager.default.fileExists(atPath: jsonURL.path) else {
-            throw ImportError.missingJSON
-        }
-        let data = try Data(contentsOf: jsonURL)
-        let manifest = try LessonManifest.decodeValidating(from: data)
-
-        // Проверяем наличие всех mp3.
-        for pair in manifest.allAudioPairs {
-            for rel in [pair.es, pair.ru] {
-                let fileURL = contentRoot.appendingPathComponent(rel)
-                guard FileManager.default.fileExists(atPath: fileURL.path) else {
-                    throw ImportError.missingAudioFile(rel)
-                }
+            do {
+                try FileManager.default.unzipItem(at: zipURL, to: tempDir)
+            } catch {
+                throw ImportError.cannotOpenArchive
             }
-        }
 
-        let hasConflict = (try? repository.lesson(topicId: manifest.topicId)) != nil
-        return Prepared(manifest: manifest, extractedRoot: contentRoot, hasConflict: hasConflict ?? false)
+            // Некоторые ZIP оборачивают содержимое в одну корневую папку — учитываем это.
+            let contentRoot = try locateContentRoot(in: tempDir)
+
+            let jsonURL = contentRoot.appendingPathComponent("lesson.json")
+            guard FileManager.default.fileExists(atPath: jsonURL.path) else {
+                throw ImportError.missingJSON
+            }
+            let data = try Data(contentsOf: jsonURL)
+            let manifest = try LessonManifest.decodeValidating(from: data)
+
+            try verifyAudioComplete(manifest: manifest, root: contentRoot)
+
+            let hasConflict = (try? repository.lesson(topicId: manifest.topicId)) != nil
+            return Prepared(manifest: manifest, extractedRoot: contentRoot,
+                            tempDir: tempDir, hasConflict: hasConflict ?? false)
+        } catch {
+            // Любая ошибка валидации — чистим временную папку.
+            try? FileManager.default.removeItem(at: tempDir)
+            throw error
+        }
     }
 
     // MARK: - Commit
 
-    /// Завершает импорт: копирует файлы в Documents и индексирует урок в CoreData.
+    /// Завершает импорт: атомарно устанавливает файлы в Documents и индексирует урок.
+    /// Временная папка удаляется в любом случае (успех, ошибка, отмена).
     /// - Returns: nil, если resolution == .cancel.
     @discardableResult
     func commit(_ prepared: Prepared, resolution: ImportConflictResolution) throws -> Lesson? {
+        defer { cleanup(prepared) }
         if resolution == .cancel { return nil }
 
         let manifest = prepared.manifest
         let existing = try repository.lesson(topicId: manifest.topicId)
         let preserveStates = (resolution == .update)
 
-        // Каталог назначения.
         let destination = AppPaths.lessonsDirectory
             .appendingPathComponent(manifest.topicId, isDirectory: true)
 
-        if resolution == .replace {
-            try? FileManager.default.removeItem(at: destination)
-        }
-        try copyContents(from: prepared.extractedRoot, to: destination)
+        // Атомарная установка файлов: staging → проверка полноты → подмена.
+        // Если что-то падает до подмены, существующий урок остаётся нетронутым.
+        try atomicInstall(manifest: manifest, from: prepared.extractedRoot, to: destination)
 
-        let lesson = try repository.index(
+        // Индексируем только после подтверждённой установки файлов.
+        return try repository.index(
             manifest: manifest,
             existing: existing,
             preservingStates: preserveStates
         )
-
-        // Уборка временной папки.
-        cleanup(prepared)
-        return lesson
     }
 
     func cleanup(_ prepared: Prepared) {
-        // Удаляем родительскую temp-папку (extractedRoot может быть вложенным contentRoot).
-        var dir = prepared.extractedRoot
-        while dir.deletingLastPathComponent().lastPathComponent != "temp_imports"
-                && dir.pathComponents.count > AppPaths.tempImportsDirectory.pathComponents.count {
-            dir = dir.deletingLastPathComponent()
+        try? FileManager.default.removeItem(at: prepared.tempDir)
+    }
+
+    /// Удаляет всё содержимое temp_imports/ (вызывать при старте приложения — подметает
+    /// «осиротевшие» папки после краха во время импорта).
+    static func sweepTempImports() {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            at: AppPaths.tempImportsDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        for url in entries { try? fm.removeItem(at: url) }
+    }
+
+    // MARK: - Atomic install
+
+    private func atomicInstall(manifest: LessonManifest, from source: URL, to destination: URL) throws {
+        let fm = FileManager.default
+        // Staging рядом с назначением (тот же том → атомарная подмена возможна).
+        let staging = AppPaths.lessonsDirectory
+            .appendingPathComponent(".staging-\(manifest.topicId)-\(UUID().uuidString)", isDirectory: true)
+        try? fm.removeItem(at: staging)
+
+        do {
+            try fm.createDirectory(at: staging, withIntermediateDirectories: true)
+            try copyTree(from: source, to: staging)
+            // Убеждаемся, что staging полон, прежде чем что-либо трогать в назначении.
+            try verifyAudioComplete(manifest: manifest, root: staging)
+            // Тестовый seam: имитация сбоя ровно перед подменой.
+            try beforeSwapHook?()
+        } catch {
+            try? fm.removeItem(at: staging)
+            throw ImportError.copyFailed(describe(error))
         }
-        try? FileManager.default.removeItem(at: dir)
+
+        do {
+            if fm.fileExists(atPath: destination.path) {
+                _ = try fm.replaceItemAt(destination, withItemAt: staging)
+            } else {
+                try fm.createDirectory(at: destination.deletingLastPathComponent(),
+                                       withIntermediateDirectories: true)
+                try fm.moveItem(at: staging, to: destination)
+            }
+        } catch {
+            try? fm.removeItem(at: staging)
+            throw ImportError.copyFailed(describe(error))
+        }
     }
 
     // MARK: - Private
@@ -125,24 +170,34 @@ final class FileImportService {
         return root
     }
 
-    private func copyContents(from source: URL, to destination: URL) throws {
+    /// Проверяет наличие lesson.json и всех mp3 (по манифесту) в указанном корне.
+    private func verifyAudioComplete(manifest: LessonManifest, root: URL) throws {
         let fm = FileManager.default
-        do {
-            try fm.createDirectory(at: destination, withIntermediateDirectories: true)
-            // Копируем lesson.json.
-            let jsonSrc = source.appendingPathComponent("lesson.json")
-            let jsonDst = destination.appendingPathComponent("lesson.json")
-            try? fm.removeItem(at: jsonDst)
-            try fm.copyItem(at: jsonSrc, to: jsonDst)
-            // Копируем audio/ рекурсивно.
-            let audioSrc = source.appendingPathComponent("audio")
-            if fm.fileExists(atPath: audioSrc.path) {
-                let audioDst = destination.appendingPathComponent("audio")
-                try? fm.removeItem(at: audioDst)
-                try fm.copyItem(at: audioSrc, to: audioDst)
-            }
-        } catch {
-            throw ImportError.copyFailed(error.localizedDescription)
+        guard fm.fileExists(atPath: root.appendingPathComponent("lesson.json").path) else {
+            throw ImportError.missingJSON
         }
+        for pair in manifest.allAudioPairs {
+            for rel in [pair.es, pair.ru] {
+                let fileURL = root.appendingPathComponent(rel)
+                guard fm.fileExists(atPath: fileURL.path) else {
+                    throw ImportError.missingAudioFile(rel)
+                }
+            }
+        }
+    }
+
+    /// Копирует lesson.json и audio/ из source в destination (destination уже создан).
+    private func copyTree(from source: URL, to destination: URL) throws {
+        let fm = FileManager.default
+        let jsonSrc = source.appendingPathComponent("lesson.json")
+        try fm.copyItem(at: jsonSrc, to: destination.appendingPathComponent("lesson.json"))
+        let audioSrc = source.appendingPathComponent("audio")
+        if fm.fileExists(atPath: audioSrc.path) {
+            try fm.copyItem(at: audioSrc, to: destination.appendingPathComponent("audio"))
+        }
+    }
+
+    private func describe(_ error: Error) -> String {
+        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
 }
