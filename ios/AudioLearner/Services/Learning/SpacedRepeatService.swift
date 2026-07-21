@@ -44,9 +44,12 @@ struct SpacedRepeatService {
     }
 
     /// Регистрирует повтор фразы: увеличивает счётчик, ставит дату, при необходимости меняет state.
-    /// - Returns: переход состояния, если он произошёл.
+    /// - Parameter wasCorrect: правильный ли ответ (флеш-карты «Знал»/«Не знал»). При `false`
+    ///   счётчик повторов растёт, но `correctCount` не увеличивается и state НЕ повышается.
+    ///   Аудио-режимы вызывают со значением по умолчанию `true` (завершённый повтор = корректный).
+    /// - Returns: переход состояния, если он произошёл (только при `wasCorrect == true`).
     @discardableResult
-    func registerReview(_ phrase: Phrase, at date: Date = Date()) -> StateTransition? {
+    func registerReview(_ phrase: Phrase, at date: Date = Date(), wasCorrect: Bool = true) -> StateTransition? {
         phrase.reviewCount += 1
         phrase.lastReviewDate = date
 
@@ -55,9 +58,11 @@ struct SpacedRepeatService {
         stats.phrase = phrase
         stats.totalReviewCount += 1
         stats.lastReviewedAt = date
+        if wasCorrect { stats.correctCount += 1 }
 
         let old = phrase.stateEnum
-        let new = Self.evaluateState(current: old, reviewCount: Int(phrase.reviewCount))
+        // Повышение state только при корректном ответе.
+        let new = wasCorrect ? Self.evaluateState(current: old, reviewCount: Int(phrase.reviewCount)) : old
         // Следующая дата повтора (интервальная рекомендация).
         phrase.nextReviewDate = Self.nextReviewDate(for: new, from: date)
         guard new != old else { return nil }

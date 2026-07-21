@@ -11,6 +11,8 @@ struct SessionResult {
     var transitions: [SpacedRepeatService.StateTransition]
     var newAchievements: [Achievement]
     var recommendations: [String]
+    /// Точность флеш-карт «с первого раза» (0…1); nil для аудио-режимов.
+    var accuracy: Double?
 
     var averageSecondsPerPhrase: Int {
         phrasesCompleted > 0 ? durationSeconds / phrasesCompleted : 0

@@ -55,6 +55,9 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
     @ObservationIgnored private var pauseRemaining: TimeInterval = 0
     @ObservationIgnored private var pauseStartedAt: Date?
 
+    /// Отдельный плеер одиночных клипов для флеш-карт (без очереди повторов, D-19).
+    @ObservationIgnored private var clipPlayer: AVAudioPlayer?
+
     /// Тихий зациклённый плеер: звучит во время пауз, чтобы iOS не убил фоновую сессию.
     @ObservationIgnored private lazy var silencePlayer: AVAudioPlayer? = {
         guard let p = try? AVAudioPlayer(data: SilenceAudio.wavData) else { return nil }
@@ -103,6 +106,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
         player?.stop()
         player = nil
         stopSilence()
+        stopClip()
         isPlaying = false
         isFinished = false
         currentPhraseIndex = 0
@@ -153,6 +157,25 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
 
     func stop() {
         reset()
+    }
+
+    // MARK: - Single clip (флеш-карты)
+
+    /// Проигрывает одиночный аудио-клип (одна фраза), не затрагивая очередь повторов.
+    func playClip(_ url: URL, speed: Double, volume: Double) {
+        clipPlayer?.stop()
+        guard let player = try? AVAudioPlayer(contentsOf: url) else { return }
+        player.enableRate = true
+        player.rate = Float(speed)
+        player.volume = Float(volume)
+        player.prepareToPlay()
+        player.play()
+        clipPlayer = player
+    }
+
+    func stopClip() {
+        clipPlayer?.stop()
+        clipPlayer = nil
     }
 
     // MARK: - Navigation
@@ -312,7 +335,7 @@ final class SessionPlayerService: NSObject, AVAudioPlayerDelegate {
                 currentRepetition = 1
                 currentLeg = .esAudio
                 loadCurrentLeg(autoplay: isPlaying)
-            case .once, .cycleSession:
+            case .once, .cycleSession, .flashcards:
                 advancePhraseBoundary()
             }
         }

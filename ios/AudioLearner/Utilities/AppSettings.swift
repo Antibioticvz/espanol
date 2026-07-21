@@ -72,7 +72,9 @@ final class AppSettings {
             playbackMode: defaultPlaybackMode,
             sessionCycles: 2,
             lockScreenTextMode: lockScreenDisplay,
-            trackProgress: defaultTrackProgress
+            trackProgress: defaultTrackProgress,
+            flashcardDirection: .esToRu,
+            flashcardAutoplay: true
         )
     }
 }
