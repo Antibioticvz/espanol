@@ -18,6 +18,8 @@ final class PlayerViewModel {
     @ObservationIgnored private var startedAt = Date()
     @ObservationIgnored private var transitions: [SpacedRepeatService.StateTransition] = []
     @ObservationIgnored private var didFinish = false
+    @ObservationIgnored private let liveActivity = LiveActivityService()
+    @ObservationIgnored private var lastActivityIndex = -1
 
     init(env: AppEnvironment, flow: SessionFlow) {
         self.env = env
@@ -85,6 +87,10 @@ final class PlayerViewModel {
         player.volume = env.settings.defaultVolume
         player.start()
         updateNowPlaying()
+
+        // Live Activity (только аудио-сессии, не флеш-карты).
+        lastActivityIndex = player.currentPhraseIndex
+        liveActivity.start(lessonTitle: flow.sessionTitle, state: activityState())
     }
 
     // MARK: - Controls
@@ -93,6 +99,7 @@ final class PlayerViewModel {
         player.togglePlayPause()
         Haptics.impact(.light, enabled: env.settings.vibrationEnabled)
         updateNowPlaying()
+        liveActivity.update(activityState()) // отразить play/pause немедленно
     }
 
     func next() {
@@ -188,6 +195,7 @@ final class PlayerViewModel {
         let recommendations = SessionCompletion.buildRecommendations(env: env)
 
         env.lockScreen.clear()
+        liveActivity.end()
         env.activeSessionID = nil
         env.refreshWidgetStats(now: completedAt)
         Haptics.success(enabled: env.settings.sessionCompleteVibration)
@@ -225,6 +233,7 @@ final class PlayerViewModel {
             try? env.viewContext.save()
         }
         env.lockScreen.clear()
+        liveActivity.end()
         env.activeSessionID = nil
         player.reset()
         flow.reset()
@@ -233,8 +242,30 @@ final class PlayerViewModel {
 
     // MARK: - Now Playing
 
+    /// Собирает состояние Live Activity из текущей фразы (title/subtitle по режиму lock screen).
+    private func activityState() -> SessionActivityAttributes.ContentState {
+        let phrase = player.currentPhrase
+        let (title, subtitle) = LockScreenService.displayText(
+            textEs: phrase?.textEs ?? "",
+            textRu: phrase?.textRu ?? "",
+            mode: flow.config.lockScreenTextMode,
+            sideOrder: flow.config.sideOrder
+        )
+        return .init(
+            title: title, subtitle: subtitle,
+            index: player.currentPhraseIndex + 1,
+            total: player.totalPhrases,
+            isPlaying: player.isPlaying
+        )
+    }
+
     func updateNowPlaying() {
         syncFavorite()
+        // Live Activity — только на смене фразы (не по секундному прогрессу).
+        if player.currentPhraseIndex != lastActivityIndex {
+            lastActivityIndex = player.currentPhraseIndex
+            liveActivity.update(activityState())
+        }
         guard let phrase = player.currentPhrase else { return }
         env.lockScreen.update(
             textEs: phrase.textEs,

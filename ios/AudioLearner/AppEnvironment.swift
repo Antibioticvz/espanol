@@ -41,6 +41,17 @@ final class AppEnvironment {
         self.achievements = AchievementsService()
         self.backup = BackupService(repository: repository)
         self.sessionFlow = SessionFlow()
+        installIntentHandlers()
+    }
+
+    /// Подключает App Intents (виджет/Siri) к приложению.
+    private func installIntentHandlers() {
+        IntentActionCoordinator.shared.onStartDailySession = { [weak self] in
+            self?.startDailySession() ?? false
+        }
+        IntentActionCoordinator.shared.onPauseSession = { [weak self] in
+            self?.sessionFlow.player.pause()
+        }
     }
 
     var viewContext: NSManagedObjectContext { persistence.viewContext }

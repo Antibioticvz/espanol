@@ -89,7 +89,12 @@ final class LockScreenService {
 
     private func displayText(textEs: String, textRu: String, mode: LockScreenTextMode,
                              sideOrder: SideOrder) -> (String, String) {
-        // Первая/вторая сторона по порядку (title = первая сторона).
+        Self.displayText(textEs: textEs, textRu: textRu, mode: mode, sideOrder: sideOrder)
+    }
+
+    /// Композиция (title, subtitle) по режиму текста и порядку сторон (переиспользуется Live Activity).
+    static func displayText(textEs: String, textRu: String, mode: LockScreenTextMode,
+                            sideOrder: SideOrder) -> (String, String) {
         let first = sideOrder.firstIsEs ? textEs : textRu
         let second = sideOrder.firstIsEs ? textRu : textEs
         switch mode {

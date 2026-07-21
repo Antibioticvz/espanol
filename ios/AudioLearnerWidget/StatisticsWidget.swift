@@ -1,5 +1,6 @@
 import WidgetKit
 import SwiftUI
+import AppIntents
 
 /// Виджет статистики дня (спека §7.2): минуты, сессии, streak.
 /// Поддерживает Home Screen (small/medium) и lock-screen accessory (D-18).
@@ -92,6 +93,11 @@ struct StatsWidgetView: View {
                 Text("Сегодня").font(.headline)
                 Text("\(Format.minuteCount(s.minutes)) · \(Format.sessionCount(s.sessions))")
                     .font(.subheadline).foregroundStyle(.secondary)
+                Button(intent: StartDailySessionIntent()) {
+                    Label("Сессия дня", systemImage: "play.fill").font(.caption.weight(.semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.accentColor)
             }
             Spacer()
             VStack(spacing: 4) {
