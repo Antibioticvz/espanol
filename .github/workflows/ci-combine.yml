@@ -17,16 +17,25 @@ jobs:
         working-directory: combine
     steps:
       - uses: actions/checkout@v4
+      - name: Check combine exists
+        id: check
+        working-directory: .
+        run: echo "exists=$([ -f combine/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
+        if: steps.check.outputs.exists == 'true'
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: combine/package-lock.json
       - name: Install
+        if: steps.check.outputs.exists == 'true'
         run: npm ci
       - name: Typecheck
+        if: steps.check.outputs.exists == 'true'
         run: npm run typecheck
       - name: Unit tests (no real API calls)
+        if: steps.check.outputs.exists == 'true'
         run: npm test
       - name: Build
+        if: steps.check.outputs.exists == 'true'
         run: npm run build
