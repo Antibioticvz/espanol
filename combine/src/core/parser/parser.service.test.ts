@@ -268,6 +268,83 @@ describe('ParserService — ошибки формата', () => {
     expect(result2.errors).toEqual([])
     expect(result2.lesson?.topicId).toBe('01-bom-test')
   })
+
+  // Три бага, найденные fuzz-агентом (ветка feat/combine-tests) — репро подтверждены на реальном коде.
+  describe('РЕГРЕССИИ (fuzz-агент): границы id и молчаливая порча данных', () => {
+    it('#TOPIC 100+ — ошибка «от 1 до 99» с номером строки, а не тихая порча id (topic_id/id фраз кодируют номер темы двумя цифрами)', () => {
+      const raw = '#TOPIC 100 | Тема\n##BLOCK vocabulary | Слова\nel gato | кот\n'
+      const result = parser.parse(raw)
+      expect(result.lesson).toBeNull()
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0].line).toBe(1)
+      expect(result.errors[0].message).toMatch(/от 1 до 99/)
+    })
+
+    it('#TOPIC 99 (граница) — валиден, id корректны', () => {
+      const raw = '#TOPIC 99 | Тема\n##BLOCK vocabulary | Слова\nel gato | кот\n'
+      const result = parser.parse(raw)
+      expect(result.errors).toEqual([])
+      expect(result.lesson?.topicId).toMatch(/^99-/)
+    })
+
+    it('vocabulary с ≥100 элементами — ошибка на 100-й строке, первые 99 приняты, id не ломает паттерн схемы', () => {
+      const lines = ['#TOPIC 1 | Тема', '##BLOCK vocabulary | Слова']
+      for (let i = 1; i <= 100; i++) lines.push(`palabra${i} | слово${i}`)
+      const result = parser.parse(lines.join('\n') + '\n')
+
+      expect(result.errors).toHaveLength(1)
+      // Строка 1-2 — заголовки, слова начинаются с строки 3, поэтому 100-е слово — строка 102.
+      expect(result.errors[0].line).toBe(102)
+      expect(result.errors[0].message).toMatch(/не больше 99|не может содержать больше 99/)
+      expect(result.lesson).not.toBeNull()
+      if (result.lesson?.blocks[0].type === 'vocabulary') {
+        expect(result.lesson.blocks[0].words).toHaveLength(99)
+        const idPattern = /^[0-9]{2}-(b[0-9]+-)?[a-z0-9-]+-[0-9]{2}$/
+        for (const w of result.lesson.blocks[0].words) expect(w.id).toMatch(idPattern)
+        expect(result.lesson.blocks[0].words[98].id).toBe('01-b1-vocab-99')
+      }
+    })
+
+    it('группа verb_group с ≥100 фразами — ошибка на 100-й строке, первые 99 приняты', () => {
+      const lines = ['#TOPIC 1 | Тема', '##BLOCK verb_group | Глаголы', '#WORD tener | иметь']
+      for (let i = 1; i <= 100; i++) lines.push(`Tengo ${i}. | Имею ${i}.`)
+      const result = parser.parse(lines.join('\n') + '\n')
+
+      expect(result.errors).toHaveLength(1)
+      // Строки 1-3 — заголовки, фразы начинаются со строки 4, 100-я фраза — строка 103.
+      expect(result.errors[0].line).toBe(103)
+      expect(result.errors[0].message).toMatch(/не больше 99|не может содержать больше 99/)
+      if (result.lesson?.blocks[0].type === 'verb_group') {
+        expect(result.lesson.blocks[0].groups[0].phrases).toHaveLength(99)
+        expect(result.lesson.blocks[0].groups[0].phrases[98].id).toBe('01-b1-tener-99')
+      }
+    })
+
+    it('лишний "|" в строке фразы — ошибка парсера, а не тихая порча (раньше "Mundo | Extra" уезжало в RU)', () => {
+      const raw = '#TOPIC 1 | Тема\n##BLOCK vocabulary | Слова\nHola | Mundo | Extra\n'
+      const result = parser.parse(raw)
+      // Строка — единственная в блоке, поэтому отклонение строки каскадно даёт ещё 2 ошибки
+      // (пустой блок vocabulary -> нет ни одного валидного блока в файле, оба фатальны для
+      // lesson) — это ожидаемое поведение best-effort парсера (см. другие тесты выше), тут
+      // важно, что ИМЕННО ошибка про лишний "|" присутствует и указывает на нужную строку.
+      expect(result.errors.some((e) => e.line === 3 && e.message.includes('больше одного разделителя'))).toBe(true)
+      // Строка отклонена целиком — не появилась как слово с испорченным RU="Mundo | Extra".
+      expect(result.lesson).toBeNull()
+    })
+
+    it('лишний "|" внутри #WORD/#CATEGORY фразы, когда есть другие валидные фразы — блок всё равно строится без испорченного элемента', () => {
+      const raw = '#TOPIC 1 | Тема\n##BLOCK vocabulary | Слова\nHola | Mundo | Extra\nel gato | кот\n'
+      const result = parser.parse(raw)
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0].line).toBe(3)
+      if (result.lesson?.blocks[0].type === 'vocabulary') {
+        expect(result.lesson.blocks[0].words).toHaveLength(1)
+        expect(result.lesson.blocks[0].words[0]).toMatchObject({ es: 'el gato', ru: 'кот' })
+        // Ключевая проверка: RU нигде не содержит "Mundo | Extra" — порча не просочилась.
+        expect(result.lesson.blocks[0].words.some((w) => w.ru.includes('Extra'))).toBe(false)
+      }
+    })
+  })
 })
 
 describe('ParserService — реальные уроки курса shared/course/*.txt', () => {

@@ -215,6 +215,16 @@ export class ParserService {
           })
           continue
         }
+        // topic_id/id фраз кодируют номер темы РОВНО двумя цифрами (схема: `^[0-9]{2}-...`,
+        // pad2()). Темы №100+ молча ломали паттерн (topic_id "100-..." не проходил бы схему)
+        // без единой ошибки парсера — находка fuzz-агента. Ловим здесь, с номером строки.
+        if (num > 99) {
+          errors.push({
+            line: lineNo,
+            message: `Номер темы в #TOPIC «${num}» на строке ${lineNo} должен быть от 1 до 99 (кодируется двумя цифрами в id).`
+          })
+          continue
+        }
         if (!title) {
           errors.push({ line: lineNo, message: `Пустое название темы на строке ${lineNo}.` })
           continue
@@ -391,11 +401,22 @@ export class ParserService {
         })
         continue
       }
-      const parts = splitOnce(line, '|')
-      if (!parts) {
+      // Ровно один разделитель " | " — находка fuzz-агента: "Hola | Mundo | Extra" раньше молча
+      // проходило (splitOnce берёт ПЕРВЫЙ "|", " Extra" тихо уезжало в RU вместе с "Mundo"),
+      // 0 ошибок, тихая порча данных. Символ «|» в самом тексте фразы запрещён — см. docs/LESSON_FORMAT.md.
+      const pipeCount = (line.match(/\|/g) ?? []).length
+      if (pipeCount === 0) {
         errors.push({ line: lineNo, message: `Фраза без разделителя «|» на строке ${lineNo}: «${line}».` })
         continue
       }
+      if (pipeCount > 1) {
+        errors.push({
+          line: lineNo,
+          message: `На строке ${lineNo} больше одного разделителя «|» — допустим ровно один разделитель " | ", символ «|» в тексте фразы запрещён: «${line}».`
+        })
+        continue
+      }
+      const parts = splitOnce(line, '|')!
       const es = parts[0].trim()
       const ru = parts[1].trim()
       if (!es || !ru) {
@@ -403,6 +424,15 @@ export class ParserService {
         continue
       }
       if (current.type === 'vocabulary') {
+        // id кодирует индекс двумя цифрами (pad2, схема `-[0-9]{2}$`) — 100-й элемент дал бы
+        // "...-100" и молча сломал бы паттерн (находка fuzz-агента). Ловим здесь заранее.
+        if (current.vocabIndex + 1 > 99) {
+          errors.push({
+            line: lineNo,
+            message: `Блок vocabulary «${current.titleRu}» (${current.blockId}) не может содержать больше 99 слов — лишний элемент на строке ${lineNo}.`
+          })
+          continue
+        }
         current.vocabIndex += 1
         const id = `${pad2(topicNumber ?? 0)}-${current.blockId}-vocab-${pad2(current.vocabIndex)}`
         current.words.push({ id, es, ru, sourceLine: lineNo })
@@ -413,6 +443,13 @@ export class ParserService {
         errors.push({
           line: lineNo,
           message: `Фраза на строке ${lineNo} встречена до заголовка группы (#WORD/#CATEGORY).`
+        })
+        continue
+      }
+      if (currentGroup.phrases.length + 1 > 99) {
+        errors.push({
+          line: lineNo,
+          message: `Группа «${currentGroup.key}» в блоке «${current.titleRu}» не может содержать больше 99 фраз — лишняя фраза на строке ${lineNo}.`
         })
         continue
       }
