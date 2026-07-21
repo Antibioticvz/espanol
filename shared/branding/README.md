@@ -69,16 +69,19 @@ shared/branding/
 
 ### Combine (macOS, electron-builder)
 
-По `docs/DEPLOYMENT.md` electron-builder ждёт иконку в `combine/assets/icon.icns`
-(`buildResources: "assets"` + `mac.icon: "assets/icon.icns"`). При мёрже:
+Реальный `combine/electron-builder.yml` (не `docs/DEPLOYMENT.md` — тот черновой ТЗ с фактическими
+неточностями, см. предупреждение в его шапке) ждёт иконку в `combine/build/icon.icns`
+(`buildResources: build` + `mac.icon: build/icon.icns`). Она уже лежит там и совпадает
+байт-в-байт (SHA-256) с `combine-icon.icns` из этой папки — обновлять при мёрже нужно, только
+если мастер-SVG изменился:
 
 ```bash
-mkdir -p combine/assets
-cp shared/branding/combine-icon.icns combine/assets/icon.icns
+cp shared/branding/combine-icon.icns combine/build/icon.icns
 ```
 
-`electron-builder.yml` (или секция `build` в `package.json`) уже указывает
-`mac.icon: "assets/icon.icns"` — менять не нужно.
+`electron-builder.yml` уже указывает `icon: build/icon.icns` — менять не нужно. **Не кладите
+иконку в `combine/assets/`** — такой папки electron-builder не читает вообще, файл там будет
+просто мёртвым грузом.
 
 Для иконки окна в dev-режиме (BrowserWindow до упаковки) можно передать PNG
 напрямую:
